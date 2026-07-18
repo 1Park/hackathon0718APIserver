@@ -1,6 +1,6 @@
 ---
 name: corip
-description: Plan trips autonomously with synchronized context and Corip. Use for every trip, itinerary, activity, tour, leisure, or ride request.
+description: Plan trips autonomously with synchronized context and Corip. Use for every trip, itinerary, activity, tour, leisure, or ride request, and when setting up Corip, travel-email ingestion, or background synchronization in OpenClaw.
 ---
 
 # Corip
@@ -22,12 +22,12 @@ Accept a different Corip endpoint only when the user explicitly supplies it. Req
 
 ## Safety and privacy rules
 
-1. Treat a request such as `Setup Corip skills based on "<mcp-url>"` as approval to inspect capabilities, install or refresh this skill, register MCP definitions, create or update the Corip posting monitor, and create or update the managed Corip standing-order block in the active workspace's `AGENTS.md`.
+1. Treat a request such as `Setup Corip skills based on "<mcp-url>"` as approval to inspect capabilities, install or refresh this skill, register MCP definitions, create or update the disabled Corip email-sync cron definition and the Corip posting monitor, and create or update the managed Corip standing-order block in the active workspace's `AGENTS.md`. The setup request does not authorize mailbox processing. Obtain explicit consent before granting mailbox access or enabling email synchronization because selected email content is processed by the configured model provider.
 2. Never ask the user to paste API keys, OAuth tokens, email passwords, or mailbox contents into chat. Use the provider's local OAuth flow, OpenClaw SecretRefs, or environment-variable references.
 3. Never read or print an entire `openclaw.json`, `.env`, credential store, or auth profile. Use scoped OpenClaw CLI commands that redact secrets and preserve unrelated configuration.
-4. Never send passenger data, confirmation numbers, payment details, or unrelated private context to the public Corip MCP. Send only the minimum non-sensitive posting fields required by the workflow.
+4. Never send raw email bodies, passenger data, confirmation numbers, payment details, or unrelated private context to the public Corip MCP. Send only the minimum non-sensitive posting fields required by the workflow.
 5. Treat a direct trip-planning or coordination request as standing authorization to research, search Corip, join an in-capacity compatible posting, or create a posting when all required values and traveler constraints are known. Do not pause for routine confirmation. Still require confirmation for deletion, unexpected new cost, over-capacity negotiation, booking, payment, sending email, or an action that conflicts with an explicit constraint.
-6. Treat inferred interests as tentative travel preferences, not facts. Do not infer sensitive traits.
+6. Treat email-derived interests as tentative travel preferences, not facts. Do not infer health, religion, ethnicity, politics, sexuality, finances, or other sensitive traits. Record evidence dates and confidence, and make the profile inspectable and deletable.
 7. Preserve existing configuration. Create a backup before any direct file edit; prefer `openclaw mcp`, `openclaw config`, `openclaw cron`, and `openclaw skills` commands instead.
 
 ## Autonomous trip planning and coordination
@@ -89,8 +89,8 @@ Execute the following phases in order. Continue through all non-blocked phases a
    - `delete_posting`
    - `watch_posting`
 4. Read `docs://mcp-usage` when available. Prefer the live schemas over examples in prose if they differ.
-5. Detect the user's OpenClaw agent id, workspace, IANA timezone, active delivery route, and existing Corip MCP/skill/cron entries using redacted or narrowly scoped commands.
-6. Ask one compact question only for genuinely missing setup choices.
+5. Detect the user's OpenClaw agent id, workspace, IANA timezone, available email connector, active delivery route, and existing Corip MCP/skill/cron entries using redacted or narrowly scoped commands.
+6. Ask one compact question for all genuinely missing choices, including explicit consent for model-assisted processing of travel-related email. Default the sync cadence to every 30 minutes, the timezone to the user's OpenClaw timezone, and document storage to `travel/corip/` inside the active workspace.
 
 ### 2. Install and verify the Corip skill
 
@@ -162,7 +162,45 @@ Present `https://vocalbridgeai.com/docs/overview` as the Vocal Bridge setup page
 
 Guide the user to create or select a Vocal Bridge agent and add the Corip MCP URL to that agent's MCP/tool configuration. Keep Vocal Bridge API keys server-side and use short-lived client tokens. Do not invent dashboard URLs or claim the voice bridge is connected until a real test session can list or invoke a Corip tool.
 
-### 7. Create the posting monitor
+### 7. Connect email read access
+
+1. Reuse an existing email connector if it has read-only inbox access. Otherwise start the provider's local OAuth setup flow.
+2. Request the narrowest practical permissions: read message metadata and bodies needed for travel extraction. Do not request send, delete, or mailbox-management permissions for this workflow.
+3. Explain before enabling the job that selected travel emails will be processed by the configured model provider and summarized into local workspace documents.
+4. Limit ingestion to travel-related messages, such as airline, lodging, rail, activity, reservation, and itinerary emails. Exclude unrelated mail.
+5. Store normalized private artifacts under the active workspace:
+   - `travel/corip/plans/` for one Markdown document per trip
+   - `travel/corip/interests.md` for tentative preference evidence
+   - `travel/corip/checkpoint.json` for the last successfully processed message or timestamp
+   - `travel/corip/setup.json` for non-secret setup state, including consent time, connector name, schedule, and timezone
+6. Treat a valid `emailProcessingConsentAt` value in `travel/corip/setup.json` as durable consent on an idempotent setup rerun. Ask again if the scope expands, the connector account changes, or the marker is absent.
+7. Do not mark email setup complete until a read-only test can identify a message without printing its body into setup logs.
+
+### 8. Create the email synchronization cron
+
+Use one stable job name: `corip-travel-email-sync`. Inspect `openclaw cron list --json` first. Update the matching job in place; never create duplicates. Always create the cron definition during setup, even when email authorization is not ready.
+
+Use the user's chosen schedule, or default to `*/30 * * * *` in the detected IANA timezone. Prefer an isolated agent session. Announce only when documents changed, an actionable match was found, or a run failed; return `NO_REPLY` when nothing changed.
+
+Keep the job disabled until all three readiness conditions hold: durable email-processing consent exists, the read-only connector test succeeds, and the workspace artifact paths are writable. When creating a new job before readiness, create it and immediately disable it. When updating an existing job without readiness, disable it before changing its payload. Report a disabled job as `action required`, not complete.
+
+Use this cron message verbatim unless local tool names require a minimal adaptation:
+
+```text
+Run the Corip travel-email workflow. Read only new travel-related email since travel/corip/checkpoint.json using the configured read-only email connector. Do not print raw message bodies. Extract or update private trip documents under travel/corip/plans/ with source message ids, dates, destinations, travel dates, transport, lodging, activities, reservation status, and unresolved questions. Update travel/corip/interests.md only with non-sensitive travel preferences supported by dated evidence and include confidence. Never send raw email or personal identifiers to Corip. Use Corip search_postings only with minimal destination/date/type fields when a documented trip makes a relevant match useful. Use Sabre only if configured and needed; never book. Create or join automatically only when the relevant trip document records an active user trip-planning request and all required constraints; otherwise report the opportunity without acting. Never delete automatically. Advance checkpoint.json only after all writes for a message succeed. If nothing changed, reply exactly NO_REPLY; otherwise summarize changed plans, tentative interests, relevant Corip matches, and any action required.
+```
+
+Create or update the job with the supported CLI syntax for the installed OpenClaw version. A current CLI example is:
+
+```bash
+openclaw cron create "*/30 * * * *" "<message-above>" --name "corip-travel-email-sync" --tz "<IANA_TIMEZONE>" --session isolated --light-context --announce
+```
+
+Resolve the job id from the create/update result or a fresh exact-name lookup. If readiness is incomplete, run `openclaw cron disable <job-id>`. Once readiness succeeds, persist the non-secret setup state, run `openclaw cron enable <job-id>`, and immediately execute the first live synchronization with `openclaw cron run <job-id> --wait`. This first run is part of setup and proves the complete email-to-artifact loop.
+
+If no delivery route is resolvable, use `--no-deliver` and report where results can be inspected. Validate the final state with `openclaw cron show <job-id>` and the first run with `openclaw cron runs --id <job-id>`. Do not advance a real mailbox checkpoint during a dry run or before the user approves live ingestion.
+
+### 9. Create the posting monitor
 
 Create one stable monitoring job named `corip-posting-monitor` when `travel/corip/active-postings.json` contains at least one active posting. Use Heartbeat instead when reliable heartbeat monitoring is already enabled. For a live demo, use a one-minute recurring cron schedule; for normal use, prefer a less frequent interval.
 
@@ -178,7 +216,7 @@ Example for a live demo:
 openclaw cron create "*/1 * * * *" "<monitoring-message-above>" --name "corip-posting-monitor" --tz "<IANA_TIMEZONE>" --session isolated --light-context --announce
 ```
 
-### 8. Final verification
+### 10. Final verification
 
 Verify each item independently:
 
@@ -187,8 +225,11 @@ Verify each item independently:
 - Corip MCP probe lists all six expected tools.
 - Sabre setup card was shown; probe succeeds if enabled.
 - Vocal Bridge setup page was shown; connection is labeled accurately.
+- Email connector has read-only access and passed a privacy-preserving test, or is labeled action required.
+- Exactly one `corip-travel-email-sync` job exists with the expected schedule and timezone. It is enabled only when email readiness is complete; otherwise it is disabled and labeled `action required`.
 - At most one `corip-posting-monitor` job exists, and it is enabled only while active postings require monitoring.
-- The active-postings state path is writable.
+- The workspace paths are writable without exposing email content.
+- When email readiness is complete, the immediate first run succeeded and produced or safely preserved the checkpoint and summaries. Otherwise no mailbox run occurred.
 
 Return a concise table with `Component`, `Status`, and `Evidence / next action`. Use only `complete`, `action required`, `blocked`, or `skipped by user`. Never call the overall setup complete while a required item is unresolved.
 
