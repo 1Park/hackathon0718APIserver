@@ -2,110 +2,132 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { test } = require('node:test');
+const demo = require('./demo-script');
 
-const skill = fs.readFileSync(
-  path.join(__dirname, '..', 'skills', 'corip', 'SKILL.md'),
-  'utf8'
-);
-const serverSource = fs.readFileSync(path.join(__dirname, 'index.js'), 'utf8');
-const usageGuide = fs.readFileSync(path.join(__dirname, '..', 'MCP_USAGE.md'), 'utf8');
+const skill = fs.readFileSync(path.join(__dirname, '..', 'skills', 'corip', 'SKILL.md'), 'utf8');
+const agents = fs.readFileSync(path.join(__dirname, '..', 'AGENTS.md'), 'utf8');
+const server = fs.readFileSync(path.join(__dirname, 'index.js'), 'utf8');
 
-test('Corip setup includes the privacy-gated email synchronization cron', () => {
-  assert.match(skill, /### 7\. Connect email read access/);
-  assert.match(skill, /### 8\. Create the email synchronization cron/);
-  assert.match(skill, /corip-travel-email-sync/);
-  assert.match(skill, /emailProcessingConsentAt/);
-  assert.match(skill, /invoke `corip_approve_email_sync`/i);
-  assert.match(skill, /Stop and wait inside the approval tool call/);
-  assert.match(skill, /do not mutate the job until a successful `corip_approve_email_sync` result/);
-  assert.match(skill, /Never silently use `disabled` as the outcome of a denied, timed-out, or unavailable approval card/);
-  assert.match(skill, /Treat chat text such as `Approve email`.*as a request to open the native card/is);
-  assert.match(skill, /setup must invoke `corip_approve_email_sync` in this same turn before it sends a final setup summary/i);
-  assert.match(skill, /Never end with a prose invitation such as `If you want email sync, approve it`/i);
-  assert.match(skill, /append it while preserving every existing entry; never replace or clear the allowlist/i);
-  assert.match(skill, /restrictive profiles such as `coding`/i);
-  assert.match(skill, /openclaw cron run <job-id> --wait/);
+test('demo MCP exposes fifteen scene tools and three deterministic live wrappers', () => {
+  const expected = [
+    'sync_live_demo_postings',
+    'confirm_live_kayak_posting',
+    'cancel_live_balboa_posting',
+    'begin_initial_setup',
+    'connect_corip',
+    'enable_travel_email_workflow',
+    'complete_sabre_setup',
+    'complete_vocalbridge_setup',
+    'review_trip_request',
+    'check_balance_and_find_hotel',
+    'confirm_hotel_rebooking',
+    'get_saturday_candidates',
+    'register_saturday_plan',
+    'get_participant_status',
+    'complete_operator_calls',
+    'confirm_kayak_tour',
+    'cancel_balboa_activity',
+    'get_final_trip_summary',
+  ];
+  for (const tool of expected) assert.match(server, new RegExp(`'${tool}'`));
+  assert.doesNotMatch(server, /registerTool\(\s*'create_posting'/);
+  assert.doesNotMatch(server, /corip_approve_email_sync/);
 });
 
-test('email approval gate is available before the Corip skill is installed', () => {
-  for (const bootstrapSource of [serverSource, usageGuide]) {
-    assert.match(bootstrapSource, /corip_approve_email_sync/);
-    assert.match(bootstrapSource, /plugin:\/\/corip-approvals\/bundle\.json/);
-    assert.match(bootstrapSource, /plugin-install.*approval/is);
-    assert.match(bootstrapSource, /not email consent|never email consent/i);
-    assert.match(bootstrapSource, /Never (?:replace|substitute).*prose/i);
+test('scene facts match the replacement script', () => {
+  const all = JSON.stringify(demo.SCENES);
+  for (const fact of [
+    'Corip MCP connected',
+    'Every day at 8:00 AM',
+    'Gmail connected successfully',
+    'Sabre connected',
+    'VocalBridge connected',
+    'American Airlines',
+    '$438.16',
+    'La Jolla Sea Caves Kayak Tour',
+    'Balboa Park Food & Photo Walk',
+    'Shared Uber to La Jolla',
+    '3 / 4',
+    '2 / 6',
+    '$72.00',
+    '9:30 AM',
+    '1 minute 48 seconds',
+    '2 minutes 6 seconds',
+  ]) assert.match(all, new RegExp(fact.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+});
+
+test('approval transitions and button labels are exact', () => {
+  assert.deepEqual(demo.SCENES.initialSetup.approval.buttons.map((b) => b.label), ['Deny', 'Allow Once', 'Always Allow Corip']);
+  assert.deepEqual(demo.SCENES.connectCorip.approval.buttons.map((b) => b.label), ['Deny', 'Allow Once', 'Allow Travel Emails']);
+  assert.deepEqual(demo.SCENES.enableTravelEmail.approval.buttons.map((b) => b.label), ['Not Now', 'Open Setup Page']);
+  assert.deepEqual(demo.SCENES.setupSabre.approval.buttons.map((b) => b.label), ['Not Now', 'Open Setup Page']);
+  assert.deepEqual(demo.SCENES.reviewTrip.approval.buttons.map((b) => b.label), ['Deny', 'Allow Once']);
+  assert.deepEqual(demo.SCENES.findHotel.approval.buttons.map((b) => b.label), ['Not Now', 'Review Alternatives', 'Confirm $438.16']);
+  assert.deepEqual(demo.SCENES.saturdayCandidates.approval.buttons.map((b) => b.label), ['Cancel', 'Edit Selection', 'Continue']);
+  assert.deepEqual(demo.SCENES.participantStatus.approval.buttons.map((b) => b.label), ['Deny', 'Edit Limits', 'Allow Calls']);
+  assert.deepEqual(demo.SCENES.operatorCalls.approval.buttons.map((b) => b.label), ['Decline', 'Confirm $72.00']);
+  assert.deepEqual(demo.SCENES.confirmKayak.approval.buttons.map((b) => b.label), ['Keep Recruiting', 'Search Alternatives', 'Cancel Activity']);
+  assert.equal(demo.SCENES.confirmHotel.continueImmediately.tool, 'get_saturday_candidates');
+});
+
+test('Telegram deliveries are atomic and keep the next approval in the same message', () => {
+  const email = demo.buildTelegramDelivery(demo.SCENES.enableTravelEmail);
+  assert.equal(email.exactlyOnce, true);
+  assert.match(email.message, /Travel email workflow enabled/);
+  assert.match(email.message, /Sabre API/);
+  assert.match(email.message, /Set up Sabre\?/);
+  assert.deepEqual(email.presentation.blocks.at(-1).buttons.map((button) => button.label), ['Not Now', 'Open Setup Page']);
+
+  const trip = demo.buildTelegramDelivery(demo.SCENES.reviewTrip);
+  assert.ok(trip.message.indexOf('I found an urgent issue') < trip.message.indexOf('Allow a balance check?'));
+
+  const hotel = demo.buildTelegramDelivery(demo.SCENES.findHotel);
+  assert.doesNotMatch(hotel.message, /I found an urgent issue/);
+  assert.match(hotel.message, /Rebook canceled hotel/);
+});
+
+test('skill and standing order restrict live effects and enforce buttons', () => {
+  for (const source of [skill, agents]) {
+    assert.match(source, /hybrid demo/i);
+    assert.match(source, /persistent.*(?:interactive|approval)|approval.*persistent/i);
+    assert.match(source, /corip-live/i);
+    assert.match(source, /vocalbridge/i);
+    assert.match(source, /Never (?:use|broaden)|remain staged/i);
+    assert.match(source, /Confirm \$72\.00/);
+    assert.match(source, /Confirm \$438\.16/);
+    assert.match(source, /Cancel Activity/);
+    assert.match(source, /messageId/);
+    assert.match(source, /remove the buttons|remove its buttons/i);
   }
-  assert.match(serverSource, /Text such as "Approve email".*requests the native card/is);
-  assert.match(serverSource, /invoke corip_approve_email_sync in the same setup turn before sending any final setup summary/i);
-  assert.match(serverSource, /append the exact corip_approve_email_sync tool without removing existing entries/i);
 });
 
-test('Corip setup immediately applies proposals and chains native approval cards', () => {
-  for (const source of [skill, usageGuide, serverSource]) {
-    assert.match(source, /action(?:=| `)create/is);
-    assert.match(source, /proposal_id/is);
-    assert.match(source, /immediately call.*action(?:=| `)apply/is);
-    assert.match(source, /User explicitly requested Corip setup/i);
-    assert.match(source, /After every|After each.*allow-once/is);
-    assert.match(source, /final setup summary|final summary/is);
-  }
-  assert.match(skill, /Do not call the message tool between these calls/i);
-  assert.match(skill, /Never stop after proposal creation or ask for approval in prose/i);
-  assert.match(serverSource, /Never send a message saying that a proposal was created/i);
-  assert.match(skill, /resume without asking the user to repeat setup/i);
-  for (const source of [skill, usageGuide, serverSource]) {
-    assert.match(source, /Immediately after the approved plugin installation and allowlist update both succeed/is);
-    assert.match(source, /openclaw gateway restart/is);
-    assert.match(source, /Do not restart after denial, timeout, or failure/is);
-  }
+test('hybrid demo declares the real Corip POST and VocalBridge contracts', () => {
+  assert.match(skill, /sync_live_demo_postings\(stage="initial"\)/);
+  assert.match(skill, /sync_live_demo_postings\(stage="two_days_later"\)/);
+  assert.match(skill, /confirm_live_kayak_posting/);
+  assert.match(skill, /cancel_live_balboa_posting/);
+  assert.match(skill, /vocalbridge\.negotiate_reservation/);
+  for (const field of [
+    'country',
+    'city',
+    'location',
+    'activity_date',
+    'min_participants',
+    'current_participants',
+    'provider_phone',
+  ]) assert.match(skill, new RegExp(field));
 });
 
-test('Corip setup preserves the canonical skill and cannot omit email setup as out of scope', () => {
-  for (const source of [skill, usageGuide, serverSource]) {
-    assert.match(source, /exact UTF-8 (?:text|content)/i);
-    assert.match(source, /(?:Do not|Never) summarize, shorten, rewrite/i);
-    assert.match(source, /posting-only/i);
-    assert.match(source, /not out of scope|not separate optional scope|are part of Corip setup/i);
-    assert.match(source, /setup request requires showing the email card/i);
-    assert.match(source, /not itself email consent|does not grant email consent/i);
-  }
-  assert.match(serverSource, /Never report "Corip is set up" until/i);
-  assert.match(serverSource, /A posting-only skill plus MCP registration is incomplete setup/i);
-  assert.match(skill, /byte-for-byte or SHA-256 equivalent/i);
-});
-
-test('MCP server publishes the hash-verified approval plugin bundle', () => {
-  assert.match(serverSource, /corip-openclaw-plugin-bundle-v1/);
-  assert.match(serverSource, /crypto\.createHash\('sha256'\)/);
-  assert.match(serverSource, /dist\/index\.js/);
-  assert.match(serverSource, /mimeType: 'application\/json'/);
-});
-
-test('Corip posting monitor uses a one-minute cron schedule', () => {
-  assert.match(
-    skill,
-    /openclaw cron create "\*\/1 \* \* \* \*" "<monitoring-message-above>" --name "corip-posting-monitor"/
-  );
-  assert.doesNotMatch(skill, /for normal use, prefer a less frequent interval/i);
-});
-
-test('Saturday trip planning requires all marketplaces, schedule persistence, and a Corip post', () => {
-  for (const source of [skill, usageGuide, serverSource]) {
-    assert.match(source, /Viator/i);
-    assert.match(source, /GetYourGuide/i);
-    assert.match(source, /MyRealTrip/i);
-    assert.match(source, /corip-schedule/i);
-    assert.match(source, /create_posting/i);
-  }
-  assert.match(skill, /Do not stop at “no Corip match”/i);
-  assert.match(skill, /call `join_posting` once to count that creator/i);
-  assert.match(skill, /verify the new posting with `get_posting`/i);
-  assert.match(skill, /minPeople: 2.*maxPeople: 4/is);
-  assert.match(skill, /first tool action must load and follow `skills\/corip\/SKILL\.md`/i);
-  assert.match(skill, /do not reply until you have separately searched Viator, GetYourGuide, and MyRealTrip/i);
-  assert.match(skill, /`No compatible Corip activity` is not completion evidence/i);
-  assert.match(skill, /site:viator\.com.*site:getyourguide\.com.*site:myrealtrip\.com/is);
-  assert.match(skill, /Open one resulting marketplace URL per site with `web_fetch`/i);
-  assert.match(skill, /repeating one generic query three times does not satisfy/i);
-  assert.match(skill, /remove or replace every stale entry with the same posting id or `linkedScheduleMarker`/i);
+test('live Corip writer owns deterministic records and exact participant targets', () => {
+  const live = fs.readFileSync(path.join(__dirname, 'live-corip.js'), 'utf8');
+  for (const owner of [
+    'corip-telegram-demo-kayak-owner',
+    'corip-telegram-demo-uber-owner',
+    'corip-telegram-demo-balboa-owner',
+  ]) assert.match(live, new RegExp(owner));
+  assert.match(live, /corip-postings-kimmc3423\.fly\.dev\/mcp/);
+  assert.equal(require('./live-corip').DEFINITIONS.kayak.members.length, 2);
+  assert.equal(require('./live-corip').DEFINITIONS.uber.members.length, 3);
+  assert.equal(require('./live-corip').DEFINITIONS.balboa.members.length, 0);
+  assert.match(live, /delete_posting[\s\S]*definition\.owner/);
 });
