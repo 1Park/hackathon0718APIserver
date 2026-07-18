@@ -3,7 +3,8 @@
 Native OpenClaw approval control for Corip setup. The plugin exposes
 `corip_approve_email_sync`, which displays an `allow-once`/`deny` approval card
 before Corip may access travel-related email or mutate the recurring email-sync
-cron.
+cron. It uses OpenClaw's declared trusted-tool-policy contract only to request
+that card; the policy never returns an automatic allow decision.
 
 ## Build and validate
 

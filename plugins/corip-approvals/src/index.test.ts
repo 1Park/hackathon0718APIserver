@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import plugin, { approvalForTool, EMAIL_SYNC_APPROVAL_TOOL } from "./index.js";
+import plugin, {
+  approvalForTool,
+  EMAIL_SYNC_APPROVAL_POLICY,
+  EMAIL_SYNC_APPROVAL_TOOL,
+} from "./index.js";
 
 describe("corip approval policy", () => {
   it("requests one native Allow/Deny decision for email synchronization", () => {
@@ -35,45 +39,47 @@ describe("corip approval policy", () => {
     expect(request?.description.length).toBeLessThanOrEqual(256);
   });
 
-  it("requests approval inside only the Corip tool without a global tool hook", async () => {
+  it("requests approval through the scoped native policy without auto-allowing", async () => {
     let toolFactory: ((ctx: Record<string, unknown>) => any) | undefined;
-    const gatewayRequest = vi.fn().mockResolvedValue({ decision: "allow-once" });
+    let policy: { id: string; evaluate: (event: any, ctx: any) => any } | undefined;
     const on = vi.fn();
     plugin.register?.({
       registerTool(factory: unknown) {
         toolFactory = factory as (ctx: Record<string, unknown>) => any;
       },
-      on,
-      runtime: {
-        gateway: {
-          isAvailable: async () => true,
-          request: gatewayRequest,
-        },
+      registerTrustedToolPolicy(candidate: unknown) {
+        policy = candidate as typeof policy;
       },
+      on,
     } as never);
 
     expect(on).not.toHaveBeenCalled();
-    const tool = toolFactory?.({
-      agentId: "main",
-      sessionKey: "agent:main:telegram:direct:test",
-      deliveryContext: { channel: "telegram", to: "test" },
+    expect(policy?.id).toBe(EMAIL_SYNC_APPROVAL_POLICY);
+    const decision = policy?.evaluate({
+      toolName: EMAIL_SYNC_APPROVAL_TOOL,
+      params: {
+        connector: "Gmail",
+        schedule: "*/30 * * * *",
+        timezone: "Asia/Seoul",
+      },
+    }, {});
+    expect(decision).toMatchObject({
+      requireApproval: {
+        title: "Enable Corip email sync",
+        allowedDecisions: ["allow-once", "deny"],
+        timeoutBehavior: "deny",
+      },
     });
+    expect(decision).not.toHaveProperty("allow");
+    expect(policy?.evaluate({ toolName: "search_postings", params: {} }, {})).toBeUndefined();
+
+    const tool = toolFactory?.({});
     const result = await tool.execute("call-1", {
       connector: "Gmail",
       schedule: "*/30 * * * *",
       timezone: "Asia/Seoul",
     });
 
-    expect(gatewayRequest).toHaveBeenCalledWith(
-      "plugin.approval.request",
-      expect.objectContaining({
-        toolName: EMAIL_SYNC_APPROVAL_TOOL,
-        sessionKey: "agent:main:telegram:direct:test",
-        turnSourceChannel: "telegram",
-        turnSourceTo: "test",
-      }),
-      expect.any(Object),
-    );
     expect(result.details).toMatchObject({ approved: true });
   });
 });

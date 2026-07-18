@@ -1,6 +1,7 @@
 import { Type } from "typebox";
 import { definePluginEntry, } from "openclaw/plugin-sdk/plugin-entry";
 export const EMAIL_SYNC_APPROVAL_TOOL = "corip_approve_email_sync";
+export const EMAIL_SYNC_APPROVAL_POLICY = "corip-email-sync-approval";
 function boundedLabel(value, fallback) {
     if (typeof value !== "string")
         return fallback;
@@ -33,7 +34,28 @@ const plugin = definePluginEntry({
     name: "Corip Approvals",
     description: "Require a native approval card before Corip email synchronization setup.",
     register(api) {
-        api.registerTool((ctx) => ({
+        const approvalPolicy = {
+            id: EMAIL_SYNC_APPROVAL_POLICY,
+            description: "Request explicit user approval before Corip email synchronization setup.",
+            evaluate(event) {
+                const approval = approvalForTool({
+                    toolName: event.toolName,
+                    params: event.params,
+                });
+                if (!approval)
+                    return;
+                return {
+                    requireApproval: {
+                        ...approval,
+                        timeoutBehavior: "deny",
+                        timeoutReason: "Corip email sync approval timed out.",
+                        pluginId: "corip-approvals",
+                    },
+                };
+            },
+        };
+        api.registerTrustedToolPolicy(approvalPolicy);
+        api.registerTool(() => ({
             name: EMAIL_SYNC_APPROVAL_TOOL,
             label: "Approve Corip email sync",
             description: "Request native user approval before Corip accesses travel email or changes the " +
@@ -45,53 +67,8 @@ const plugin = definePluginEntry({
                 schedule: Type.String({ description: "Cron expression shown to the user." }),
                 timezone: Type.String({ description: "IANA timezone shown to the user." }),
             }, { additionalProperties: false }),
-            async execute(toolCallId, params, signal) {
+            async execute(_toolCallId, params, signal) {
                 signal?.throwIfAborted();
-                const approval = approvalForTool({
-                    toolName: EMAIL_SYNC_APPROVAL_TOOL,
-                    params: params,
-                });
-                if (!approval || !(await api.runtime.gateway.isAvailable())) {
-                    const unavailable = {
-                        approved: false,
-                        decision: "unavailable",
-                        permission: "corip-travel-email-sync",
-                    };
-                    return {
-                        content: [{ type: "text", text: JSON.stringify(unavailable) }],
-                        details: unavailable,
-                        isError: true,
-                    };
-                }
-                const route = ctx.deliveryContext;
-                const response = await api.runtime.gateway.request("plugin.approval.request", {
-                    pluginId: "corip-approvals",
-                    title: approval.title,
-                    description: approval.description,
-                    severity: approval.severity,
-                    toolName: EMAIL_SYNC_APPROVAL_TOOL,
-                    toolCallId,
-                    allowedDecisions: approval.allowedDecisions,
-                    agentId: ctx.agentId,
-                    sessionKey: ctx.sessionKey,
-                    turnSourceChannel: route?.channel ?? ctx.messageChannel,
-                    turnSourceTo: route?.to,
-                    turnSourceAccountId: route?.accountId ?? ctx.agentAccountId,
-                    turnSourceThreadId: route?.threadId,
-                    timeoutMs: approval.timeoutMs,
-                }, { timeoutMs: approval.timeoutMs + 5_000 });
-                if (response.decision !== "allow-once") {
-                    const rejected = {
-                        approved: false,
-                        decision: response.decision ?? "timeout",
-                        permission: "corip-travel-email-sync",
-                    };
-                    return {
-                        content: [{ type: "text", text: JSON.stringify(rejected) }],
-                        details: rejected,
-                        isError: true,
-                    };
-                }
                 const result = {
                     approved: true,
                     permission: "corip-travel-email-sync",

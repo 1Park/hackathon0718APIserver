@@ -17,6 +17,16 @@ openclaw mcp probe corip --json
 
 The server exposes six tools after connection.
 
+### Chain the native setup approvals
+
+A request such as `Setup Corip skills based on "<mcp-url>"` explicitly requests both creation and application of the Skill Workshop proposal. Call `skill_workshop` with action `create`, then use its returned `proposal_id` to immediately call action `apply` with reason `User explicitly requested Corip setup.` The `apply` call creates the native approval card. Do not send `proposal created`, `once approved`, or similar prose between those calls.
+
+Use the exact UTF-8 content returned by `skill://corip/SKILL.md` as `proposal_content`. Do not summarize, shorten, rewrite, or replace it with a posting-only skill. Verify the installed skill is byte-for-byte or SHA-256 equivalent to the resource; a mismatch blocks setup and must never be reported as completion.
+
+After each `allow-once`, continue immediately to the next approval-gated setup action: apply the skill, install and activate the approval plugin when needed, then invoke `corip_approve_email_sync` for the separate email-consent card. Do not make the user repeat the setup request, and send the final setup summary only after all approved phases and verification have completed. A denial or timeout is not approval and leaves that phase unchanged.
+
+Plugin installation, the required Gateway restart, the native email-consent card, and approved background synchronization are part of Corip setup. They are not out of scope and do not require a second prose setup request. The original setup request requires showing the email card but does not grant email consent; only that card's `allow-once` result authorizes email access and cron mutation.
+
 ### Install native Corip approval controls
 
 The Skill cannot create an OpenClaw approval card by prose alone. Install the bundled native plugin before the email phase so setup can call `corip_approve_email_sync`:
@@ -29,7 +39,7 @@ openclaw plugins install .
 openclaw gateway restart
 ```
 
-When setup starts from only the public MCP URL and the tool is missing, read `plugin://corip-approvals/bundle.json`. Accept only format `corip-openclaw-plugin-bundle-v1`, plugin id `corip-approvals`, and the exact unique path set `package.json`, `openclaw.plugin.json`, `dist/index.js`, and `README.md`. Reject absolute paths, traversal, links, extra or duplicate files, manifest id mismatch, or any lowercase SHA-256 digest mismatch. Materialize the verified files in a new narrowly scoped temporary directory and install that directory with `openclaw plugins install <temporary-directory>`. Then read only `tools.alsoAllow` and append the exact `corip_approve_email_sync` name while preserving all existing entries. This is required under restrictive tool profiles such as `coding`; it exposes only the approval gate and does not grant mailbox permission. Restart the Gateway and stop the current setup turn. Resume only in a fresh agent turn where `corip_approve_email_sync` is visible.
+When setup starts from only the public MCP URL and the tool is missing, read `plugin://corip-approvals/bundle.json`. Accept only format `corip-openclaw-plugin-bundle-v1`, plugin id `corip-approvals`, and the exact unique path set `package.json`, `openclaw.plugin.json`, `dist/index.js`, and `README.md`. Reject absolute paths, traversal, links, extra or duplicate files, manifest id mismatch, or any lowercase SHA-256 digest mismatch. Materialize the verified files in a new narrowly scoped temporary directory and install that directory with `openclaw plugins install <temporary-directory>`. Then read only `tools.alsoAllow` and append the exact `corip_approve_email_sync` name while preserving all existing entries. This is required under restrictive tool profiles such as `coding`; it exposes only the approval gate and does not grant mailbox permission. Immediately after the approved plugin installation and allowlist update both succeed, run `openclaw gateway restart` automatically without another prose confirmation. Do not restart after denial, timeout, or failure. If a fresh turn is required to expose the tool, use the runtime's supported continuation path and resume without asking the user to repeat setup; invoke `corip_approve_email_sync` as the first approval action when durable consent is absent.
 
 The plugin-install or Skill Workshop approval authorizes only that named operation. It is not email consent. After the plugin is loaded, call `corip_approve_email_sync` with the non-secret connector label, exact cron expression, and IANA timezone. The resulting native card covers read-only travel-email access, model-assisted local summaries, and the recurring `corip-travel-email-sync` cron. Never substitute a prose permission question. On denial, timeout, or missing approval routing, leave email and cron configuration unchanged.
 
