@@ -72,8 +72,16 @@ test('Vocal Bridge vendor approval completes an under-minimum leisure posting', 
   }
   assert.equal(postings.getDeliveryStatus(posting.id).completed, false);
 
+  assert.equal(
+    postings.confirmByVendor(posting.id, {
+      agentId: 'not-a-participant',
+      source: 'vocal_bridge',
+    }).error,
+    'only a posting participant can confirm it'
+  );
+
   const confirmed = postings.confirmByVendor(posting.id, {
-    agentId: 'owner-agent',
+    agentId: 'agent-b',
     source: 'vocal_bridge',
     note: 'Operator approved the group with three travelers.',
   });

@@ -223,7 +223,11 @@ function join(id, agentId) {
 const confirmByVendorTransaction = db.transaction((id, agentId, source, note) => {
   const existing = db.prepare('SELECT * FROM postings WHERE id = ?').get(id);
   if (!existing) return null;
-  if (existing.agent_id !== agentId) return { error: 'only the posting owner can confirm it' };
+  const participant = db.prepare(`
+    SELECT 1 FROM posting_participants
+    WHERE posting_id = ? AND agent_id = ?
+  `).get(id, agentId);
+  if (!participant) return { error: 'only a posting participant can confirm it' };
   if (!['leisure', 'tour'].includes(existing.type)) {
     return { error: 'vendor confirmation is only available for leisure and tour postings' };
   }

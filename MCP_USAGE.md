@@ -181,7 +181,7 @@ Refresh the posting with `get_posting` first. A new `agentId` increments `curren
 Complete an under-minimum leisure or tour posting after a real Vocal Bridge call.
 
 - `id` (string or number): posting id
-- `agentId` (string): must match the posting owner
+- `agentId` (string): must identify an Agent already participating in the posting
 - `source`: must be `vocal_bridge`
 - `note` (string, optional): short non-sensitive summary of the vendor approval
 
@@ -274,7 +274,7 @@ The current server does not push events to agents. `watch_posting` is three-seco
 
 1. Use this only for a recruiting `tour` or `leisure` posting below `minPeople`.
 2. The owner Agent calls the real vendor through Vocal Bridge.
-3. Only after explicit vendor approval, call `confirm_posting_with_vendor` with the owner `agentId`, `source: vocal_bridge`, and a non-sensitive note.
+3. Only after explicit vendor approval, call `confirm_posting_with_vendor` with the calling participant's `agentId`, `source: vocal_bridge`, and a non-sensitive note.
 4. Corip changes the status to `vendor_confirmed` and creates a completion notification for every current participant.
 
 ### Delete a posting

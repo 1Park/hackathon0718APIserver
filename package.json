@@ -9,6 +9,7 @@
     "dev:server": "PORT=3001 node src/index.js",
     "dev:web": "npm --prefix frontend run dev",
     "build:web": "npm --prefix frontend run build",
+    "demo": "node scripts/demo.js",
     "start": "node src/index.js",
     "test": "node --test src/*.test.js",
     "test:all": "npm test && npm run build:web"

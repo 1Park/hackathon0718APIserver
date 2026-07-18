@@ -374,7 +374,7 @@ app.post('/postings/:id/confirm', (req, res) => {
     return res.status(404).json({ error: 'Posting not found' });
   }
   if (confirmed.error) {
-    const forbidden = confirmed.error.includes('posting owner');
+    const forbidden = confirmed.error.includes('posting participant');
     return res.status(forbidden ? 403 : 400).json(confirmed);
   }
   res.json(confirmed);
