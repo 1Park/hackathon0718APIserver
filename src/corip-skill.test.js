@@ -13,7 +13,10 @@ test('Corip setup includes the privacy-gated email synchronization cron', () => 
   assert.match(skill, /### 8\. Create the email synchronization cron/);
   assert.match(skill, /corip-travel-email-sync/);
   assert.match(skill, /emailProcessingConsentAt/);
-  assert.match(skill, /Keep the job disabled until all three readiness conditions hold/);
+  assert.match(skill, /Stop and wait for the user's answer/);
+  assert.match(skill, /lack of a response is not a denial/);
+  assert.match(skill, /do not mutate the job until explicit approval or durable consent exists/);
+  assert.match(skill, /Never silently use `disabled` as the outcome of an unanswered approval request/);
   assert.match(skill, /openclaw cron run <job-id> --wait/);
 });
 
