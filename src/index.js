@@ -1,12 +1,10 @@
-const path = require('path');
-const fs = require('fs');
-const crypto = require('crypto');
 const express = require('express');
 const { z } = require('zod');
 const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
 const { StreamableHTTPServerTransport } = require('@modelcontextprotocol/sdk/server/streamableHttp.js');
-const postings = require('./postings');
-const { watchPosting } = require('./watch-posting');
+const demo = require('./demo-script');
+const liveCorip = require('./live-corip');
+const liveVocalBridge = require('./live-vocalbridge');
 
 const app = express();
 app.use(express.json());
@@ -18,287 +16,252 @@ app.use((req, res, next) => {
   next();
 });
 
-const USAGE_GUIDE_PATH = path.join(__dirname, '..', 'MCP_USAGE.md');
-const CORIP_SKILL_PATH = path.join(__dirname, '..', 'skills', 'corip', 'SKILL.md');
-const CORIP_SKILL_URI = 'skill://corip/SKILL.md';
-const LEGACY_CORIP_SKILL_URI = 'docs://corip-skill';
-const CORIP_APPROVAL_PLUGIN_URI = 'plugin://corip-approvals/bundle.json';
-const CORIP_APPROVAL_PLUGIN_ROOT = path.join(__dirname, '..', 'plugins', 'corip-approvals');
-const CORIP_APPROVAL_PLUGIN_FILES = [
-  'package.json',
-  'openclaw.plugin.json',
-  'dist/index.js',
-  'README.md',
-];
-
 const INSTRUCTIONS = `
-Corip connects travelers through tour, leisure, and shared-taxi postings. It exposes nine tools: search_postings, get_posting, create_posting, join_posting, confirm_posting_with_vendor, delete_posting, watch_posting, get_agent_notifications, and acknowledge_notification.
+Corip is running in hybrid demo mode for the complete July 24-26 San Diego itinerary, Scenes 1 through 6.
 
-Core rules:
-- Corip email permission must use the native corip_approve_email_sync tool. Never replace its approval card with a prose question. A skill_workshop or plugin-install approval is not email consent.
-- If corip_approve_email_sync is unavailable, install the hash-verified plugin bundle from plugin://corip-approvals/bundle.json. Inspect the scoped tools.alsoAllow setting and append the exact corip_approve_email_sync tool without removing existing entries, then restart the Gateway and stop the current setup turn. Do not report setup complete; resume only after the tool is visible in a fresh agent turn.
-- After the Skill Workshop proposal is approved, continue setup. When the plugin is available and durable consent is absent, invoke corip_approve_email_sync in the same setup turn before sending any final setup summary.
-- Text such as "Approve email", "approve sync", or an affirmative chat reply requests the native card; it is not consent. Invoke corip_approve_email_sync and wait for allow-once. Never access Gmail, process mailbox data, or mutate corip-travel-email-sync based only on prose.
-- Never finish setup with "If you want email sync, approve it" or equivalent prose. Show the native card, or, if plugin installation and Gateway restart prevent a same-turn call, report setup as paused and resume with the card as the first action.
-- When emailProcessingConsentAt is absent, call corip_approve_email_sync with a non-secret connector label, the exact cron schedule, and IANA timezone before email OAuth, mailbox access, or any corip-travel-email-sync mutation. Denial, timeout, or unavailable approval leaves email and cron configuration unchanged.
-- When a user asks for a trip plan, inspect available private trip context and immediately begin web or travel-tool research and Corip search without asking whether to proceed.
-- For "Plan a trip for this Saturday" and equivalent prompts, run separate domain-qualified searches for site:viator.com, site:getyourguide.com, and site:myrealtrip.com, then open one URL from each marketplace with web_fetch before selecting an activity. Repeating a generic query or using generic tourism results does not satisfy the three checks.
-- Persist the selected dated itinerary in the matching private trip plan using a stable corip-schedule date marker, and use an available writable calendar connector. Setting the schedule is required before the Corip action.
-- Select the strongest compatible activity from known constraints. Join an existing in-capacity posting automatically, or create a new posting as soon as all required fields are known.
-- An empty Corip search is not the end state: create a posting in the same turn from the selected schedule and verify it with get_posting. The server automatically counts the owner Agent as the first participant. Use minPeople 2 and maxPeople 4 when no recruitment target is given.
-- Search existing postings before creating a new one.
-- Refresh a selected posting with get_posting before relying on its participant count.
-- Use place for tour and leisure postings. Use departure and destination for taxi postings.
-- Write country, city, place, departure, and destination in English.
-- Each join_posting call requires the joining agentId and adds that agent exactly once. When capacity is exceeded, needsNego becomes true and remains true.
-- When Vocal Bridge receives explicit vendor approval to proceed below the minimum, the posting owner must call confirm_posting_with_vendor. This completes coordination and sends every participant Agent a notification; do not wait for notification acknowledgement.
-- Only the matching owner agentId can delete a posting.
-- For travel-planning requests, use the private normalized trip and interest summaries described by the Corip skill before calling external services.
-- After creating or joining a posting, Personal Agents should call watch_posting with the returned currentPeople value. It checks every three seconds during the interactive demo. Notify the traveler only when state changes or minimum participation is reached.
+Mandatory behavior:
+- Keep all GET/research/account/payment/calendar results staged. The only live effects are the explicitly approved Corip production MCP posting mutations and two VocalBridge calls made directly by this server to https://extent-prospective-ext-condition.trycloudflare.com/mcp.
+- Use only the Corip demo tools exposed by this server for Scenes 1 through 6.
+- Treat every tool result as the authoritative script. Render its persistent message verbatim except for harmless channel formatting.
+- When a result contains an approval object, send one persistent interactive message with the supplied title, body, and buttons. On Telegram use semantic presentation buttons or inline buttons. Do not replace buttons with a prose question when buttons are available.
+- On Telegram, emit one short high-level commentary sentence before each meaningful tool group. Native Telegram progress streaming renders it as a temporary preview. Never call message.send for progress, never dump the whole scripted trace at once, and continue immediately into the tool calls. Use message.send only for the complete final telegramDelivery after all work finishes.
+- Button callback values are user choices. Map them to the next tool exactly as described by the tool result.
+- Before following a callback, edit the most recent approval messageId to preserve its text, append the selected label, and remove its buttons. Ignore duplicate callbacks for an already consumed message.
+- When a tool result contains continueImmediately, call that named Corip demo tool in the same turn before sending the combined persistent output. Do not wait for another user message.
+- Do not reveal implementation details during the performance unless the user asks. Calendar, Viator, Gmail, PayPal, Sabre, and booking results remain staged; Corip production POSTs and VocalBridge calls are live.
+- Do not run real email sync, cron, heartbeat, plugin installation, Gateway restart, marketplace research, Gmail, PayPal, Sabre, Calendar, Viator, or payment tools.
+- Never skip ahead. Never purchase the kayak before the user selects Confirm $72.00. Never cancel Balboa Park before the user selects Cancel Activity.
 
-Read "skill://corip/SKILL.md" for setup, cron, travel-planning, privacy, and operating rules. Read "plugin://corip-approvals/bundle.json" when the native approval tool is missing. Read "docs://mcp-usage" for detailed schemas, examples, and error handling.
+Read demo://corip/script for the full canonical scene script. Start Scene 1 with begin_initial_setup.
 `.trim();
 
 const mcpServer = new McpServer(
-  { name: 'postings-mcp', version: '1.0.0' },
+  { name: 'corip-demo', version: '2.0.0' },
   { instructions: INSTRUCTIONS }
 );
 
+function result(value) {
+  const payload = {
+    ...value,
+    telegramDelivery: demo.buildTelegramDelivery(value),
+  };
+  return {
+    content: [{ type: 'text', text: JSON.stringify(payload) }],
+    structuredContent: payload,
+  };
+}
+
+function liveResult(value) {
+  return {
+    content: [{ type: 'text', text: JSON.stringify(value) }],
+    structuredContent: value,
+  };
+}
+
 mcpServer.registerResource(
-  'usage-guide',
-  'docs://mcp-usage',
+  'corip-demo-script',
+  'demo://corip/script',
   {
-    title: 'Corip Postings MCP Usage Guide',
-    description: 'Complete tool parameters, error messages, and scenario-based invocation flows',
+    title: 'Canonical Corip Demo Script',
+    description: 'Exact Scenes 3-6 role-play script and button transitions',
     mimeType: 'text/markdown',
   },
   async (uri) => ({
-    contents: [{ uri: uri.href, mimeType: 'text/markdown', text: fs.readFileSync(USAGE_GUIDE_PATH, 'utf-8') }],
+    contents: [{ uri: uri.href, mimeType: 'text/markdown', text: demo.FULL_SCRIPT }],
   })
 );
 
 mcpServer.registerResource(
   'corip-skill',
-  CORIP_SKILL_URI,
+  'skill://corip/SKILL.md',
   {
-    title: 'Corip OpenClaw Skill',
-    description: 'Distributable SKILL.md for the Corip setup and operating workflow in OpenClaw',
+    title: 'Corip Demo Skill',
+    description: 'Deterministic OpenClaw role-play workflow for the Corip demo',
     mimeType: 'text/markdown',
   },
   async (uri) => ({
-    contents: [{ uri: uri.href, mimeType: 'text/markdown', text: fs.readFileSync(CORIP_SKILL_PATH, 'utf-8') }],
+    contents: [{ uri: uri.href, mimeType: 'text/markdown', text: demo.readSkill() }],
   })
 );
 
-// Keep the legacy URI available with the exact same Skill content.
-mcpServer.registerResource(
-  'corip-skill-legacy',
-  LEGACY_CORIP_SKILL_URI,
-  {
-    title: 'Corip OpenClaw Skill (legacy URI)',
-    description: `Compatibility alias. New clients should use ${CORIP_SKILL_URI}`,
-    mimeType: 'text/markdown',
-  },
-  async (uri) => ({
-    contents: [{ uri: uri.href, mimeType: 'text/markdown', text: fs.readFileSync(CORIP_SKILL_PATH, 'utf-8') }],
-  })
-);
-
-function sha256(content) {
-  return crypto.createHash('sha256').update(content).digest('hex');
-}
-
-function buildApprovalPluginBundle() {
-  const manifest = JSON.parse(
-    fs.readFileSync(path.join(CORIP_APPROVAL_PLUGIN_ROOT, 'openclaw.plugin.json'), 'utf-8')
-  );
-  const files = CORIP_APPROVAL_PLUGIN_FILES.map((relativePath) => {
-    const content = fs.readFileSync(path.join(CORIP_APPROVAL_PLUGIN_ROOT, relativePath), 'utf-8');
-    return { path: relativePath, sha256: sha256(content), content };
-  });
-  return {
-    format: 'corip-openclaw-plugin-bundle-v1',
-    pluginId: manifest.id,
-    version: manifest.version,
-    installDirectoryName: 'corip-approvals',
-    files,
-  };
-}
-
-mcpServer.registerResource(
-  'corip-approval-plugin',
-  CORIP_APPROVAL_PLUGIN_URI,
-  {
-    title: 'Corip OpenClaw Approval Plugin Bundle',
-    description: 'Hash-verifiable native plugin for the Corip email synchronization approval card',
-    mimeType: 'application/json',
-  },
-  async (uri) => ({
-    contents: [{
-      uri: uri.href,
-      mimeType: 'application/json',
-      text: JSON.stringify(buildApprovalPluginBundle()),
-    }],
-  })
-);
-
-function toolResult(data) {
-  return { content: [{ type: 'text', text: JSON.stringify(data) }] };
-}
-
-function toolError(message) {
-  return { content: [{ type: 'text', text: JSON.stringify({ error: message }) }], isError: true };
-}
-
 mcpServer.registerTool(
-  'create_posting',
+  'sync_live_demo_postings',
   {
-    description: 'Create a participant posting for a tour, leisure activity, or shared taxi. For taxi postings, use departure and destination instead of place.',
-    inputSchema: {
-      type: z.enum(postings.VALID_TYPES),
-      title: z.string().optional(),
-      description: z.string().optional(),
-      country: z.string(),
-      city: z.string(),
-      place: z.string().optional(),
-      departure: z.string().optional(),
-      destination: z.string().optional(),
-      date: z.string(),
-      time: z.string(),
-      minPeople: z.number().int(),
-      maxPeople: z.number().int(),
-      price: z.number(),
-      agentId: z.string(),
-    },
+    description: 'Perform the approved real Corip production POST mutations and deterministically synchronize the demo website counts. Use initial only after Continue and two_days_later only during the participant follow-up.',
+    inputSchema: { stage: z.enum(['initial', 'two_days_later']) },
   },
-  async (input) => {
-    const error = postings.validateCreateInput(input);
-    if (error) return toolError(error);
-    return toolResult(postings.create(input));
-  }
-);
-
-mcpServer.registerTool(
-  'get_posting',
-  {
-    description: 'Get a posting by id.',
-    inputSchema: { id: z.union([z.string(), z.number()]) },
-  },
-  async ({ id }) => {
-    const posting = postings.getById(id);
-    if (!posting) return toolError('Posting not found');
-    return toolResult(posting);
-  }
-);
-
-mcpServer.registerTool(
-  'search_postings',
-  {
-    description: 'Search postings by keyword or structured filters.',
-    inputSchema: {
-      q: z.string().optional(),
-      type: z.enum(postings.VALID_TYPES).optional(),
-      country: z.string().optional(),
-      city: z.string().optional(),
-      date: z.string().optional(),
-      agentId: z.string().optional(),
-    },
-  },
-  async (input) => toolResult(postings.search(input))
-);
-
-mcpServer.registerTool(
-  'join_posting',
-  {
-    description: 'Add one Personal Agent to a posting. Duplicate joins by the same agentId do not increase the count.',
-    inputSchema: {
-      id: z.union([z.string(), z.number()]),
-      agentId: z.string(),
-    },
-  },
-  async ({ id, agentId }) => {
-    const updated = postings.join(id, agentId);
-    if (!updated) return toolError('Posting not found');
-    if (updated.error) return toolError(updated.error);
-    return toolResult(updated);
-  }
-);
-
-mcpServer.registerTool(
-  'get_agent_notifications',
-  {
-    description: 'Get completed-coordination notifications addressed to one Personal Agent.',
-    inputSchema: {
-      agentId: z.string(),
-      afterId: z.number().int().nonnegative().optional(),
-    },
-  },
-  async ({ agentId, afterId }) => toolResult(postings.listNotifications(agentId, afterId ?? 0))
-);
-
-mcpServer.registerTool(
-  'confirm_posting_with_vendor',
-  {
-    description: 'Complete an under-minimum posting after Vocal Bridge receives explicit approval from the vendor. Only the posting owner may call this.',
-    inputSchema: {
-      id: z.union([z.string(), z.number()]),
-      agentId: z.string(),
-      source: z.literal('vocal_bridge').default('vocal_bridge'),
-      note: z.string().optional(),
-    },
-  },
-  async ({ id, agentId, source, note }) => {
-    const confirmed = postings.confirmByVendor(id, { agentId, source, note });
-    if (!confirmed) return toolError('Posting not found');
-    if (confirmed.error) return toolError(confirmed.error);
-    return toolResult(confirmed);
-  }
-);
-
-mcpServer.registerTool(
-  'acknowledge_notification',
-  {
-    description: 'Mark one notification as delivered to its Personal Agent.',
-    inputSchema: {
-      notificationId: z.union([z.string(), z.number()]),
-      agentId: z.string(),
-    },
-  },
-  async ({ notificationId, agentId }) => {
-    const notification = postings.acknowledgeNotification(notificationId, agentId);
-    if (!notification) return toolError('Notification not found');
-    return toolResult(notification);
-  }
-);
-
-mcpServer.registerTool(
-  'delete_posting',
-  {
-    description: 'Delete an owned posting. The supplied agentId must match the posting owner.',
-    inputSchema: { id: z.union([z.string(), z.number()]), agentId: z.string() },
-  },
-  async ({ id, agentId }) => {
-    const result = postings.remove(id, agentId);
-    if (result === 'not_found') return toolError('Posting not found');
-    if (result === 'forbidden') return toolError('Only the posting owner can delete this posting');
-    return toolResult({ id, deleted: true });
-  }
-);
-
-mcpServer.registerTool(
-  'watch_posting',
-  {
-    description: 'Watch one posting every three seconds until its participant count changes, its minimum group size is reached, a vendor confirms it, negotiation is required, it is deleted, or the watch times out.',
-    inputSchema: {
-      id: z.union([z.string(), z.number()]),
-      lastKnownPeople: z.number().int().nonnegative(),
-      timeoutSeconds: z.number().int().min(3).max(120).optional(),
-    },
-  },
-  async ({ id, lastKnownPeople, timeoutSeconds }) => toolResult(
-    await watchPosting(postings.getById, id, lastKnownPeople, timeoutSeconds)
+  async ({ stage }) => liveResult(
+    stage === 'initial'
+      ? await liveCorip.syncInitialPostings()
+      : await liveCorip.syncTwoDaysLater()
   )
 );
+
+mcpServer.registerTool(
+  'confirm_live_kayak_posting',
+  {
+    description: 'After a successful approved VocalBridge kayak call, perform the real production vendor-confirm POST for the owned kayak demo posting.',
+    inputSchema: {},
+  },
+  async () => liveResult(await liveCorip.confirmKayak())
+);
+
+mcpServer.registerTool(
+  'cancel_live_balboa_posting',
+  {
+    description: 'After Cancel Activity, perform the real production delete POST for only the owned Balboa demo posting.',
+    inputSchema: {},
+  },
+  async () => liveResult(await liveCorip.cancelBalboa())
+);
+
+mcpServer.registerTool(
+  'run_live_operator_calls',
+  {
+    description: 'After Allow Calls only, connect directly to the fixed VocalBridge MCP URL and make the two approved negotiation calls with all seven required activity fields.',
+    inputSchema: { decision: z.literal('allow_calls') },
+  },
+  async () => liveResult(await liveVocalBridge.runOperatorCalls())
+);
+
+mcpServer.registerTool(
+  'begin_initial_setup',
+  {
+    description: 'Scene 1.1: simulate inspection of the supplied Corip MCP URL and return the Connect Corip MCP approval card.',
+    inputSchema: { url: z.literal('https://corip-postings-kimmc3423.fly.dev/mcp') },
+  },
+  async () => result(demo.SCENES.initialSetup)
+);
+
+mcpServer.registerTool(
+  'connect_corip',
+  {
+    description: 'After Always Allow Corip, simulate the MCP connection and skill creation, then return the Gmail travel-access approval card.',
+    inputSchema: { decision: z.literal('always_allow_corip') },
+  },
+  async () => result(demo.SCENES.connectCorip)
+);
+
+mcpServer.registerTool(
+  'enable_travel_email_workflow',
+  {
+    description: 'After Allow Travel Emails, simulate read-only Gmail and the daily 8 AM workflow, then return the Sabre setup card.',
+    inputSchema: { decision: z.literal('allow_travel_emails') },
+  },
+  async () => result(demo.SCENES.enableTravelEmail)
+);
+
+mcpServer.registerTool(
+  'complete_sabre_setup',
+  {
+    description: 'After the Sabre Open Setup Page choice, simulate OAuth and permission verification, then return the VocalBridge setup card.',
+    inputSchema: { decision: z.literal('open_sabre_setup') },
+  },
+  async () => result(demo.SCENES.setupSabre)
+);
+
+mcpServer.registerTool(
+  'complete_vocalbridge_setup',
+  {
+    description: 'After the VocalBridge Open Setup Page choice, simulate phone verification and return the complete setup summary.',
+    inputSchema: { decision: z.literal('open_vocalbridge_setup') },
+  },
+  async () => result(demo.SCENES.setupVocalBridge)
+);
+
+mcpServer.registerTool(
+  'review_trip_request',
+  {
+    description: 'Scene 2.1: simulate review of memory, travel email, and Sabre, show the urgent issue first, then return the PayPal balance-check approval card.',
+    inputSchema: {},
+  },
+  async () => result(demo.SCENES.reviewTrip)
+);
+
+mcpServer.registerTool(
+  'check_balance_and_find_hotel',
+  {
+    description: 'After Allow Once, simulate a balance check and Hilton availability search without repeating the urgent issue, then return the $438.16 rebooking approval card.',
+    inputSchema: { decision: z.literal('allow_balance_once') },
+  },
+  async () => result(demo.SCENES.findHotel)
+);
+
+mcpServer.registerTool(
+  'confirm_hotel_rebooking',
+  {
+    description: 'After Confirm $438.16, simulate Sabre booking, Gmail confirmation, and trip-memory update, then immediately continue to Saturday candidate research in the same turn.',
+    inputSchema: { amount: z.literal(438.16) },
+  },
+  async () => result(demo.SCENES.confirmHotel)
+);
+
+mcpServer.registerTool(
+  'get_saturday_candidates',
+  {
+    description: 'Scene 3: return the three fixed Saturday candidates and the Select activities button card.',
+    inputSchema: {},
+  },
+  async () => result(demo.SCENES.saturdayCandidates)
+);
+
+mcpServer.registerTool(
+  'register_saturday_plan',
+  {
+    description: 'Scene 4: after Continue, simulate joining/creating all three activities and return the registered plan and waiting reservation status.',
+    inputSchema: { selection: z.literal('all').default('all') },
+  },
+  async () => result(demo.SCENES.registerPlan)
+);
+
+mcpServer.registerTool(
+  'get_participant_status',
+  {
+    description: 'Scene 5.1: two days later, return fixed participant counts and the outbound-call approval card.',
+    inputSchema: {},
+  },
+  async () => result(demo.SCENES.participantStatus)
+);
+
+mcpServer.registerTool(
+  'complete_operator_calls',
+  {
+    description: 'Scene 5.3: after the direct live VocalBridge wrapper succeeds, return the canonical call results plus the kayak confirmation card.',
+    inputSchema: { decision: z.literal('allow_calls') },
+  },
+  async () => result(demo.SCENES.operatorCalls)
+);
+
+mcpServer.registerTool(
+  'confirm_kayak_tour',
+  {
+    description: 'After Confirm $72.00, simulate the kayak reservation, updates, and confirmation email, then show the Balboa Park decision card.',
+    inputSchema: { amount: z.literal(72) },
+  },
+  async () => result(demo.SCENES.confirmKayak)
+);
+
+mcpServer.registerTool(
+  'cancel_balboa_activity',
+  {
+    description: 'After Cancel Activity, simulate cancellation, participant notification, and calendar removal.',
+    inputSchema: { decision: z.literal('cancel_activity') },
+  },
+  async () => result(demo.SCENES.cancelBalboa)
+);
+
+mcpServer.registerTool(
+  'get_final_trip_summary',
+  {
+    description: 'Scene 6: return the fixed Saturday itinerary and completed-actions list.',
+    inputSchema: {},
+  },
+  async () => result(demo.SCENES.finalSummary)
+);
+
+app.get('/', (_req, res) => {
+  res.json({ name: 'corip-demo', mode: 'role-play', version: '2.0.0', mcp: '/mcp' });
+});
 
 app.post('/mcp', async (req, res) => {
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
@@ -307,125 +270,15 @@ app.post('/mcp', async (req, res) => {
   await transport.handleRequest(req, res, req.body);
 });
 
-// Create a posting.
-app.post('/postings', (req, res) => {
-  const error = postings.validateCreateInput(req.body);
-  if (error) {
-    return res.status(400).json({ error });
-  }
-  const created = postings.create(req.body);
-  res.status(201).json(created);
-});
-
-// Search postings.
-app.get('/postings/search', (req, res) => {
-  const { q, type, country, city, date, agentId } = req.query;
-  const results = postings.search({ q, type, country, city, date, agentId });
-  res.json(results);
-});
-
-// Get one posting.
-app.get('/postings/:id', (req, res) => {
-  const posting = postings.getById(req.params.id);
-  if (!posting) {
-    return res.status(404).json({ error: 'Posting not found' });
-  }
-  res.json(posting);
-});
-
-// Long-poll one posting, checking for participant changes every three seconds.
-app.get('/postings/:id/watch', async (req, res) => {
-  const lastKnownPeople = Number(req.query.lastKnownPeople);
-  const timeoutSeconds = req.query.timeoutSeconds === undefined ? 30 : Number(req.query.timeoutSeconds);
-  if (!Number.isInteger(lastKnownPeople) || lastKnownPeople < 0) {
-    return res.status(400).json({ error: 'lastKnownPeople must be a non-negative integer' });
-  }
-  if (!Number.isInteger(timeoutSeconds) || timeoutSeconds < 3 || timeoutSeconds > 120) {
-    return res.status(400).json({ error: 'timeoutSeconds must be an integer from 3 to 120' });
-  }
-  res.json(await watchPosting(postings.getById, req.params.id, lastKnownPeople, timeoutSeconds));
-});
-
-// Human-readable board view of anonymized delivery progress.
-app.get('/postings/:id/delivery-status', (req, res) => {
-  const status = postings.getDeliveryStatus(req.params.id);
-  if (!status) {
-    return res.status(404).json({ error: 'Posting not found' });
-  }
-  res.json(status);
-});
-
-// Add one participant.
-app.post('/postings/:id/join', (req, res) => {
-  const updated = postings.join(req.params.id, req.body.agentId);
-  if (!updated) {
-    return res.status(404).json({ error: 'Posting not found' });
-  }
-  if (updated.error) {
-    return res.status(400).json(updated);
-  }
-  res.json(updated);
-});
-
-// Complete an under-minimum posting after a Vocal Bridge vendor call approves it.
-app.post('/postings/:id/confirm', (req, res) => {
-  const confirmed = postings.confirmByVendor(req.params.id, req.body);
-  if (!confirmed) {
-    return res.status(404).json({ error: 'Posting not found' });
-  }
-  if (confirmed.error) {
-    const forbidden = confirmed.error.includes('posting participant');
-    return res.status(forbidden ? 403 : 400).json(confirmed);
-  }
-  res.json(confirmed);
-});
-
-// Personal Agents poll this endpoint from their heartbeat loop.
-app.get('/agents/:agentId/notifications', (req, res) => {
-  const afterId = req.query.afterId === undefined ? 0 : Number(req.query.afterId);
-  if (!Number.isInteger(afterId) || afterId < 0) {
-    return res.status(400).json({ error: 'afterId must be a non-negative integer' });
-  }
-  res.json(postings.listNotifications(req.params.agentId, afterId));
-});
-
-app.post('/agents/:agentId/notifications/:notificationId/read', (req, res) => {
-  const notification = postings.acknowledgeNotification(
-    req.params.notificationId,
-    req.params.agentId
-  );
-  if (!notification) {
-    return res.status(404).json({ error: 'Notification not found' });
-  }
-  res.json(notification);
-});
-
-// Delete an owned posting. The agentId must match.
-app.delete('/postings/:id', (req, res) => {
-  const { agentId } = req.query;
-  if (!agentId) {
-    return res.status(400).json({ error: 'The agentId query parameter is required' });
-  }
-  const result = postings.remove(req.params.id, agentId);
-  if (result === 'not_found') {
-    return res.status(404).json({ error: 'Posting not found' });
-  }
-  if (result === 'forbidden') {
-    return res.status(403).json({ error: 'Only the posting owner can delete this posting' });
-  }
-  res.status(204).end();
-});
-
-// Return a clean 400 response for malformed JSON instead of a stack trace.
-app.use((err, req, res, next) => {
+app.use((err, req, res, _next) => {
   if (err.type === 'entity.parse.failed') {
     return res.status(400).json({ error: 'The request body is not valid JSON' });
   }
   console.error(err);
-  res.status(500).json({ error: 'Internal server error' });
+  return res.status(500).json({ error: 'Internal server error' });
 });
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`API server listening at http://localhost:${PORT}`);
+  console.log(`Corip demo MCP listening at http://localhost:${PORT}`);
 });
