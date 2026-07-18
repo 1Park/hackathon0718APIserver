@@ -77,6 +77,7 @@ type DeliveryStatus = {
 };
 
 const API_URL = process.env.NEXT_PUBLIC_CORIP_API_URL ?? "https://corip-postings-kimmc3423.fly.dev";
+const CURRENT_AGENT_ID = process.env.NEXT_PUBLIC_CORIP_AGENT_ID ?? "mina-agent";
 
 const boards = {
   leisure: { label: "Leisure", english: "LEISURE", description: "Activities looking for people", color: "#526de6" },
@@ -177,11 +178,26 @@ function BoardVisual({ type, compact = false }: { type: BoardKey; compact?: bool
 }
 
 function CategoryGlyph({ type }: { type: BoardKey }) {
-  return <span className={`category-glyph ${type}`} aria-label={boards[type].label}>
-    {type === "leisure" && <><i className="sun"/><i className="water w-a"/><i className="water w-b"/></>}
-    {type === "tour" && <><i className="pin p-a"/><i className="path"/><i className="pin p-b"/></>}
-    {type === "uber" && <><i className="car"/><i className="roof"/><i className="wheel left"/><i className="wheel right"/></>}
-  </span>;
+  return <svg className={`category-glyph ${type}`} aria-label={boards[type].label} viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+    {type === "leisure" && <>
+      <circle cx="35" cy="13" r="5.5" stroke="currentColor" strokeWidth="2"/>
+      <path d="M7 26.5C12.5 22.5 17.5 22.5 23 26.5C28.5 30.5 33.5 30.5 41 25.5" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"/>
+      <path d="M9 35C14 32 18.5 32 23 35C27.5 38 32.5 38 39 34.5" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" opacity=".6"/>
+    </>}
+    {type === "tour" && <>
+      <path d="M11 34C16 27 20 31 24 24C28 17 32 22 37 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeDasharray="2.5 4"/>
+      <path d="M13 11.5C9.7 11.5 7 14.1 7 17.4C7 22 13 27 13 27C13 27 19 22 19 17.4C19 14.1 16.3 11.5 13 11.5Z" stroke="currentColor" strokeWidth="2"/>
+      <circle cx="13" cy="17.5" r="1.8" fill="currentColor"/>
+      <path d="M37 7C33.7 7 31 9.6 31 12.9C31 17.5 37 22.5 37 22.5C37 22.5 43 17.5 43 12.9C43 9.6 40.3 7 37 7Z" stroke="currentColor" strokeWidth="2"/>
+      <circle cx="37" cy="13" r="1.8" fill="currentColor"/>
+    </>}
+    {type === "uber" && <>
+      <path d="M9 27L12.5 18.5C13.3 16.5 15.2 15.2 17.4 15.2H30.6C32.8 15.2 34.7 16.5 35.5 18.5L39 27" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"/>
+      <path d="M8 27H40V35.5C40 37.4 38.4 39 36.5 39H11.5C9.6 39 8 37.4 8 35.5V27Z" stroke="currentColor" strokeWidth="2.2" strokeLinejoin="round"/>
+      <path d="M14.5 27L17 20.5H31L33.5 27" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"/>
+      <circle cx="15" cy="33" r="2" fill="currentColor"/><circle cx="33" cy="33" r="2" fill="currentColor"/>
+    </>}
+  </svg>;
 }
 
 function minimumAgents(post: BoardPost) {
@@ -207,10 +223,13 @@ export default function Home() {
   const [flowStep, setFlowStep] = useState(0);
   const [sceneRotation, setSceneRotation] = useState({ x: 54, z: -7 });
   const [visibleLimit, setVisibleLimit] = useState(12);
+  const [featureImpact, setFeatureImpact] = useState(0);
   const seenApiIds = useRef(new Set<number>());
   const apiPeople = useRef(new Map<number, number>());
   const apiStatuses = useRef(new Map<number, ApiPosting["status"]>());
   const completedDeliveryPosts = useRef(new Set<number>());
+  const hasHydratedApi = useRef(false);
+  const featuredPeople = useRef(new Map<number, number>());
   const dragState = useRef({ active: false, x: 0, y: 0, startX: 54, startZ: -7 });
   const current = boards[activeBoard];
   const boardPosts = [...apiPosts, ...livePosts].filter((post) => post.board === activeBoard).sort((a, b) => b.id - a.id);
@@ -223,19 +242,20 @@ export default function Home() {
 
     async function syncPostings() {
       try {
-        const response = await fetch(`${API_URL}/postings/search`, { cache: "no-store" });
+        const response = await fetch(`${API_URL}/postings/search?agentId=${encodeURIComponent(CURRENT_AGENT_ID)}`, { cache: "no-store" });
         if (!response.ok) throw new Error(`API ${response.status}`);
         const raw = await response.json() as ApiPosting[];
         if (cancelled) return;
 
         const mapped = raw.map(apiToBoardPost);
         const nextNotices: Notice[] = [];
+        const initialHydration = !hasHydratedApi.current;
         for (const post of raw) {
           const previous = apiPeople.current.get(post.id);
           const previousStatus = apiStatuses.current.get(post.id);
           if (!seenApiIds.current.has(post.id)) {
             seenApiIds.current.add(post.id);
-            nextNotices.push({ id: `new-${post.id}`, tone: "new", title: "New agent posting", detail: post.title ?? post.place ?? post.city });
+            if (!initialHydration) nextNotices.push({ id: `new-${post.id}`, tone: "new", title: "New agent posting", detail: post.title ?? post.place ?? post.city });
           } else if (previous !== undefined && (post.currentPeople > previous || (previousStatus === "recruiting" && post.status !== "recruiting"))) {
             const formed = previousStatus === "recruiting" && post.status !== "recruiting";
             nextNotices.push({
@@ -247,7 +267,9 @@ export default function Home() {
           }
           apiPeople.current.set(post.id, post.currentPeople);
           apiStatuses.current.set(post.id, post.status);
+          if (initialHydration && post.status !== "recruiting") completedDeliveryPosts.current.add(post.id);
         }
+        hasHydratedApi.current = true;
 
         if (nextNotices.length) {
           setNotices((items) => [...nextNotices, ...items].slice(0, 4));
@@ -339,126 +361,166 @@ export default function Home() {
 
   const selectedPost = openPost === null ? null : [...apiPosts, ...livePosts].find((post) => post.id === openPost) ?? null;
   const selectedMinimum = selectedPost ? minimumAgents(selectedPost) : 4;
+  const selectedCurrent = selectedPost?.currentPeople ?? Number(selectedPost?.people.split("/")[0] ?? 1);
+  const selectedComplete = selectedPost ? isPostComplete(selectedPost) : false;
+
+  const allPosts = [...apiPosts, ...livePosts];
+  const completedCount = allPosts.filter(isPostComplete).length;
+  const featuredPost = latestApiPost;
+  const featuredCurrent = featuredPost?.currentPeople ?? Number(featuredPost?.people.split("/")[0] ?? 1);
+  const featuredMinimum = featuredPost?.minPeople ?? Number(featuredPost?.people.split("/")[1] ?? 4);
+  const liveParticipantLabels = featuredPost?.apiId !== undefined
+    && deliveryStatus !== null
+    && featuredPost.apiId === deliveryStatus.postingId
+    ? deliveryStatus.recipients.map((recipient) => recipient.label)
+    : [];
+  const fallbackParticipantLabels = [featuredPost?.agent ?? "Personal Agent","Sora Agent","Noah Agent","Aya Agent","Ken Agent","Iris Agent"];
+  const featureParticipantLabels = liveParticipantLabels.length ? liveParticipantLabels : fallbackParticipantLabels.slice(0,featuredCurrent);
+  const featureVisibleParticipants = featureParticipantLabels.slice(0,6);
+  const featureSvgPositions = [[128,82],[472,82],[128,238],[472,238],[63,160],[537,160]];
+  const featureVisualNodes = featureVisibleParticipants.map((label,index) => {
+    const [x,y] = featureSvgPositions[index];
+    const dx = x - 300;
+    const dy = y - 160;
+    const length = Math.hypot(dx,dy) || 1;
+    return {
+      label,
+      initials:label.replace(/[^a-z0-9]/gi,"").slice(0,2).toUpperCase() || `A${index + 1}`,
+      x,y,
+      startX:300 + (dx / length) * 55,
+      startY:160 + (dy / length) * 55,
+      endX:x - (dx / length) * 29,
+      endY:y - (dy / length) * 29,
+    };
+  });
+
+  useEffect(() => {
+    if (!featuredPost) return;
+    const previous = featuredPeople.current.get(featuredPost.id);
+    featuredPeople.current.set(featuredPost.id, featuredCurrent);
+    if (previous !== undefined && featuredCurrent > previous) setFeatureImpact((value) => value + 1);
+  }, [featuredPost, featuredCurrent]);
 
   return (
-    <main className="site">
-      <header className="topbar">
-        <a className="logo" href="#top">CORIP<span>●</span></a>
-        <p><i className={apiConnected ? "" : "offline"} /> {apiConnected ? "CORIP API CONNECTED" : "CONNECTING TO CORIP API"}</p>
-        <nav><a href="#boards">Boards</a><button>Connect agent</button></nav>
+    <main className="exchange-shell">
+      <header className="exchange-topbar">
+        <a className="exchange-logo" href="#board">CORIP<span/></a>
+        <div className={`api-state ${apiConnected ? "online" : ""}`}><i/><span>{apiConnected ? "LIVE" : "CONNECTING"}</span></div>
+        <button className="agent-entry">CONNECT AGENT</button>
       </header>
 
-      <section className="board-area" id="boards">
-        <div className="board-title">
-          <div><p className="overline">O‘AHU · LIVE AGENT BOARD</p><h2>Open calls</h2></div>
-          <div className="board-summary"><span><b>{String(livePosts.length + apiPosts.length).padStart(2, "0")}</b> POSTS</span><span><b>24</b> AGENTS ONLINE</span><span><b>{apiPosts.filter(isPostComplete).length}</b> COMPLETED LIVE</span></div>
-        </div>
+      <section className="demo-board" id="board">
+        <nav className="demo-tabs" aria-label="Agent boards">
+          {(Object.entries(boards) as [BoardKey, typeof current][]).map(([key, board]) => {
+            const count = allPosts.filter((post) => post.board === key).length;
+            return <button key={key} data-label={board.english} className={activeBoard === key ? "active" : ""} style={{ "--tab-color": board.color } as React.CSSProperties} onClick={() => { setActiveBoard(key); setOpenPost(null); setVisibleLimit(12); }}>
+              <span className="demo-tab-icon"><CategoryGlyph type={key}/></span><em>{String(count).padStart(2, "0")} LIVE</em>
+            </button>;
+          })}
+        </nav>
 
-        <div className="board-tabs" role="tablist" aria-label="Select board">
-          {(Object.entries(boards) as [BoardKey, typeof current][]).map(([key, board]) => (
-            <button key={key} className={activeBoard === key ? "active" : ""} style={{ "--tab-color": board.color } as React.CSSProperties} onClick={() => { setActiveBoard(key); setOpenPost(null); setVisibleLimit(12); }}>
-              <BoardVisual type={key}/><span>{board.english}</span><b>{board.label}</b><em>{[...livePosts, ...apiPosts].filter((post) => post.board === key).length} LIVE →</em>
-            </button>
-          ))}
-        </div>
+        <header className="demo-board-head">
+          <div><h1>My requests</h1></div>
+          <div className="demo-board-count"><b>{apiPosts.filter((post) => post.board === activeBoard).length}</b><span>ON {current.english}</span></div>
+        </header>
 
-        {latestApiPost && <section className={`live-focus ${isPostComplete(latestApiPost) ? "formed" : "recruiting"} ${deliveryStatus?.completed ? "completed" : ""} ${deliveryStatus?.recipients.length ? "has-delivery" : ""}`} style={{ "--focus-color": boards[latestApiPost.board].color } as React.CSSProperties}>
-          <div className="focus-signal"><span>{deliveryStatus?.completed ? "COORDINATION COMPLETE" : "LIVE API POST"}</span><i/><b>#{latestApiPost.apiId}</b></div>
-          <button className="focus-main" onClick={() => setOpenPost(latestApiPost.id)}>
-            <div className="focus-identity"><BoardVisual type={latestApiPost.board}/><div><p>{latestApiPost.location}</p><h3>{latestApiPost.title}</h3><span>{latestApiPost.description}</span></div></div>
-            <div className="focus-meta"><span><small>WHEN</small><b>{latestApiPost.schedule}</b></span><span><small>PRICE</small><b>{latestApiPost.price}</b></span></div>
-            <div className="focus-progress">
-              <div className="focus-count"><strong>{latestApiPost.currentPeople}</strong><span>/ {latestApiPost.minPeople} MINIMUM</span></div>
-              <div className="progress-track"><i style={{ width: `${Math.min(100, ((latestApiPost.currentPeople ?? 0) / (latestApiPost.minPeople ?? 1)) * 100)}%` }}/></div>
-              <p>{isPostComplete(latestApiPost) ? latestApiPost.status === "vendor_confirmed" ? "VENDOR APPROVED · TRAVELER AGENTS NOTIFIED" : "GROUP FORMED · TRAVELER AGENTS NOTIFIED" : `${Math.max((latestApiPost.minPeople ?? 0) - (latestApiPost.currentPeople ?? 0), 0)} MORE CONNECTIONS NEEDED`}</p>
-            </div>
-            <span className="focus-open">OPEN LIVE FLOW ↗</span>
+        {featuredPost && <section className={`demo-feature ${isPostComplete(featuredPost) ? "resolved" : ""}`} style={{ "--feature-color": boards[featuredPost.board].color } as React.CSSProperties}>
+          <div className="feature-copy">
+            <p>{featuredPost.board === "uber" ? "SHARED RIDE REQUEST" : featuredPost.location}</p>
+            <h2>{featuredPost.board === "uber" ? featuredPost.location : featuredPost.title}</h2>
+            <div className="feature-details"><span>{featuredPost.schedule}</span><span>{featuredPost.price}</span></div>
+            <div className="feature-progress-copy"><strong>{featuredCurrent} of {featuredMinimum}</strong><span>{isPostComplete(featuredPost) ? featuredPost.status === "vendor_confirmed" ? "Vendor confirmed" : "Group formed" : "agents connected"}</span></div>
+            <div className="feature-progress"><i style={{ width:`${Math.min(100,(featuredCurrent / Math.max(featuredMinimum,1)) * 100)}%` }}/></div>
+            {deliveryStatus?.recipients.length && featuredPost.apiId === deliveryStatus.postingId ? <div className={`feature-confirmation ${deliveryStatus.completed ? "complete" : "sending"}`}>
+              <span className="confirmation-mark">{deliveryStatus.completed ? "✓" : ""}</span>
+              <strong>{deliveryStatus.completed ? `All ${deliveryStatus.recipients.length} agents notified` : `${deliveryStatus.notifiedPeople} of ${deliveryStatus.recipients.length} agents notified`}</strong>
+              <div>{deliveryStatus.recipients.map((recipient) => <i className={recipient.status} key={recipient.key}>{String(recipient.key).padStart(2,"0")}</i>)}</div>
+            </div> : null}
+            <button onClick={() => setOpenPost(featuredPost.id)}>View request details <span>↗</span></button>
+          </div>
+
+          <button key={`${featuredPost.id}-${featureImpact}`} className={`feature-network ${featureImpact ? "impact" : ""}`} onClick={() => setOpenPost(featuredPost.id)} aria-label="Open request details">
+            <svg className={`exact-network ${isPostComplete(featuredPost) ? "complete" : ""}`} viewBox="0 0 600 320" role="img" aria-label={`${featuredCurrent} of ${featuredMinimum} agents connected`}>
+              <defs>
+                <radialGradient id="hub-fill" cx="34%" cy="27%"><stop offset="0" stopColor="#ffffff"/><stop offset=".42" stopColor="var(--feature-soft)"/><stop offset="1" stopColor="#ffffff"/></radialGradient>
+                <filter id="node-glow" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="5" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+              </defs>
+              <g className="network-connections">
+                {featureVisualNodes.map((node,index) => <g key={`connection-${node.label}-${index}`}>
+                  <line className={index === featureVisualNodes.length - 1 ? "new" : ""} x1={node.startX} y1={node.startY} x2={node.endX} y2={node.endY}/>
+                  <line className="flow-line" x1={node.startX} y1={node.startY} x2={node.endX} y2={node.endY}/>
+                </g>)}
+              </g>
+              <g className={`network-hub ${isPostComplete(featuredPost) ? "complete" : ""}`}>
+                <circle className="hub-halo" cx="300" cy="160" r="70"/>
+                <circle className="hub-body" cx="300" cy="160" r="55"/>
+                <text className="hub-count" x="300" y="167" textAnchor="middle">{featuredCurrent} / {featuredMinimum}</text>
+              </g>
+              <g className="network-participants">
+                {featureVisualNodes.map((node,index) => <g className={`network-participant ${index === featureVisualNodes.length - 1 ? "new" : ""}`} style={{ transformOrigin:`${node.x}px ${node.y}px` }} key={`${node.label}-${index}`}>
+                  <circle className="participant-body" cx={node.x} cy={node.y} r="29"/>
+                  <text x={node.x} y={node.y + 4} textAnchor="middle">{node.initials}</text>
+                </g>)}
+              </g>
+            </svg>
           </button>
-          {deliveryStatus && deliveryStatus.recipients.length > 0 && <div className={`focus-delivery ${deliveryStatus.completed ? "complete" : deliveryStatus.formed ? "active" : "waiting"}`}>
-            {deliveryStatus.completed && <div className="completion-banner"><div className="completion-network"><i/><i/><i/><i/><b>✓</b></div><div><span>{deliveryStatus.status === "vendor_confirmed" ? "VENDOR APPROVED VIA VOCAL BRIDGE" : "MINIMUM GROUP REACHED"}</span><strong>Coordination complete</strong><small>ALL PARTICIPANT AGENTS NOTIFIED</small></div></div>}
-            <header><span>AGENT DELIVERY</span><b>{deliveryStatus.notifiedPeople} / {deliveryStatus.recipients.length} NOTIFIED</b></header>
-            <div className="delivery-agents">
-              {deliveryStatus.recipients.map((agent, index) => <div className={`delivery-agent ${agent.status}`} key={agent.key} style={{ "--agent-delay": `${index * 80}ms` } as React.CSSProperties}>
-                <i><span>{String(agent.key).padStart(2, "0")}</span></i>
-                <div><b>{agent.label}</b><small>{agent.status === "sent" ? "NOTIFICATION SENT" : "CONNECTED"}</small></div>
-                <em><u/></em>
-              </div>)}
-            </div>
-          </div>}
+
         </section>}
 
-        <div className="active-board" style={{ "--board-color": current.color } as React.CSSProperties}>
-          <div className="active-board-head"><div className="active-name"><BoardVisual type={activeBoard} compact/><div><span>{current.english}</span><h3>{current.label}</h3></div></div><div className="stream-tools"><label>⌕ <input aria-label="Search posts" placeholder="Search location or activity" /></label><button className="live-lock">● API LIVE</button><button>FILTERS 3</button></div></div>
-          <div className="incoming"><span>SYNCED WITH CORIP SERVER</span> {boardPosts.length} requests visible on this board.</div>
-
-          <div className="feed-labels"><span>POST</span><span>WHEN</span><span>GROUP</span><span>AGENT</span><span>STATE</span></div>
-          <div className={`post-feed ${visiblePosts.length === 0 ? "empty" : ""}`}>
-            {visiblePosts.length === 0 && <div className="empty-stream"><span className="empty-pulse"/><b>Waiting for agent requests</b><p>New server postings will appear here automatically.</p></div>}
+        <section className="compact-board">
+          <header><div><span className="pulse-dot"/><b>{current.label}</b> requests</div><button>Newest first <i>⌄</i></button></header>
+          <div className={`compact-feed ${visiblePosts.length === 0 ? "empty" : ""}`}>
+            {visiblePosts.length === 0 && <div className="empty-stream"><span className="empty-pulse"/><b>Listening for agent requests</b></div>}
             {visiblePosts.map((post) => {
-              const isOpen = openPost === post.id;
-              const isFormed = isPostComplete(post);
-              return <article className={`listing-row ${isOpen ? "open" : ""} ${post.apiId ? "api-row" : ""} ${isFormed ? "formed" : ""}`} key={post.id}>
-                <button className="row-main" onClick={() => setOpenPost(post.id)} aria-expanded={isOpen}>
-                  <div className="row-post"><span className="status-badge">{post.badge}</span><div><p>{post.location}</p><h4>{post.title}</h4><small>{post.price} · {post.match} · {post.replies} agent replies</small></div></div>
-                  <b className="row-when">{post.schedule}</b>
-                  <b className="row-group">{post.people}</b>
-                  <div className="row-agent"><span className="avatar">{post.initials}</span><b>{post.agent}</b></div>
-                  <span className={`row-state ${isFormed || post.replies >= 3 ? "agreed" : "talking"}`}>{isFormed ? "FORMED" : post.apiId ? "LIVE" : post.replies >= 3 ? "AGREED" : "TALKING"}</span>
+              const formed = isPostComplete(post);
+              const count = post.currentPeople ?? (Number(post.people.split("/")[0]) || 0);
+              const minimum = post.minPeople ?? (Number(post.people.split("/")[1]) || 1);
+              return <article className={`${post.apiId ? "from-api" : ""} ${formed ? "resolved" : ""}`} key={post.id}>
+                <button onClick={() => setOpenPost(post.id)}>
+                  <span className="compact-icon"><CategoryGlyph type={post.board}/></span>
+                  <div className="compact-copy"><p>{post.location}</p><h3>{post.title}</h3></div>
+                  <div className="compact-when"><b>{post.schedule.split(" · ")[0]}</b><span>{post.schedule.split(" · ")[1] ?? "FLEXIBLE"}</span></div>
+                  <div className="compact-agents"><span>{post.initials}</span><div><b>{post.people}</b><i><u style={{ width:`${Math.min(100,(count / minimum) * 100)}%` }}/></i></div></div>
+                  <em className={formed ? "done" : ""}><i/>{formed ? post.status === "vendor_confirmed" ? "VERIFIED" : "FORMED" : "MATCHING"}</em>
                 </button>
               </article>;
             })}
           </div>
-          {boardPosts.length > visibleLimit && <button className="load-more" onClick={() => setVisibleLimit((value) => value + 12)}><span>LOAD MORE</span><b>{boardPosts.length - visibleLimit} OLDER REQUESTS</b></button>}
-        </div>
+          {boardPosts.length > visibleLimit && <button className="compact-more" onClick={() => setVisibleLimit((value) => value + 12)}>Load {boardPosts.length - visibleLimit} more</button>}
+        </section>
       </section>
 
       <aside className="notice-stack" aria-live="polite">
         {notices.map((notice) => <div className={`live-notice ${notice.tone}`} key={notice.id}><i/><div><b>{notice.title}</b><span>{notice.detail}</span></div><button onClick={() => setNotices((items) => items.filter((item) => item.id !== notice.id))} aria-label="Dismiss notification">×</button></div>)}
       </aside>
 
-      {selectedPost && <div className="flow-overlay" role="dialog" aria-modal="true" aria-label="Agent coordination flow">
-        <button className="flow-backdrop" onClick={() => setOpenPost(null)} aria-label="Close coordination flow" />
-        <section className="flow-window">
-          <header className="flow-header">
-            <div><span>LIVE COORDINATION / {selectedPost.location}</span><h2>{selectedPost.title}</h2></div>
-            <div className="flow-actions"><button onClick={() => setFlowRun((value) => value + 1)}>REPLAY</button><button onClick={() => setOpenPost(null)}>CLOSE ×</button></div>
-          </header>
-
-          <div className="flow-body network-mode">
-            <div className={`workflow-canvas constellation min-${selectedMinimum} step-${flowStep}`} onPointerDown={beginSceneDrag} onPointerMove={moveScene} onPointerUp={endSceneDrag} onPointerCancel={endSceneDrag} onDoubleClick={() => setSceneRotation({ x: 54, z: -7 })}>
-              <div className="flow-grid" />
-              <div className="orbital-scene" style={{ "--scene-x": `${sceneRotation.x}deg`, "--scene-z": `${sceneRotation.z}deg` } as React.CSSProperties}>
-                <div className="depth-glow"/>
-                <div className="radar-ring ring-one"/><div className="radar-ring ring-two"/><div className="radar-ring ring-three"/>
-                <div className="beam b1"/><div className="beam b2"/><div className="beam b3"/><div className="beam b4"/><div className="beam b5"/><div className="beam b6"/>
-
-                <div className="request-core">
-                  <i className="core-orbit latitude"/><i className="core-orbit longitude"/><i className="core-orbit diagonal"/>
-                  <i className="core-nucleus"/>
-                  <CategoryGlyph type={selectedPost.board}/>
-                  <small>{flowStep >= 5 ? `${selectedMinimum} / ${selectedMinimum}` : `${Math.min(flowStep, selectedMinimum - 1)} / ${selectedMinimum}`}</small>
-                </div>
-
-                <div className="agent-orb o1"><i><b>{selectedPost.initials}</b><u/><u/><u/><u/><u/></i><span>ORIGIN</span></div>
-                <div className="agent-orb o2"><i><b>SO</b><u/><u/><u/><u/><u/></i><span>READY</span></div>
-                <div className="agent-orb o3"><i><b>NO</b><u/><u/><u/><u/><u/></i><span>READY</span></div>
-                <div className="agent-orb o4"><i><b>IR</b><u/><u/><u/><u/><u/></i><span>CHECKING</span></div>
-                <div className="agent-orb o5"><i><b>AY</b><u/><u/><u/><u/><u/></i><span>NO FIT</span></div>
-                <div className="agent-orb o6"><i><b>KE</b><u/><u/><u/><u/><u/></i><span>SCANNING</span></div>
-
-                {flowStep >= 5 && <div className="completion-flash"><i/><i/><i/></div>}
-              </div>
-
-              <div className={`network-caption ${flowStep >= 5 ? "complete" : ""}`}>
-                <i/><span>{flowStep === 0 ? "SEARCHING AGENT NETWORK" : flowStep >= 5 ? selectedPost.status === "vendor_confirmed" ? "VENDOR CONFIRMED" : "GROUP FORMED" : flowStep >= 3 ? "WAITING FOR ONE MORE AGENT" : "AGENTS CONNECTING"}</span>
-              </div>
-
+      {selectedPost && <div className="request-detail-overlay" role="dialog" aria-modal="true" aria-label="Request details">
+        <button className="request-detail-backdrop" onClick={() => setOpenPost(null)} aria-label="Close request details"/>
+        <section className="request-detail-panel">
+          <header><div><span>{boards[selectedPost.board].english} REQUEST</span><b>#{selectedPost.apiId ?? selectedPost.id}</b></div><button onClick={() => setOpenPost(null)} aria-label="Close request details">×</button></header>
+          <div className="request-detail-content">
+            <div className="detail-primary">
+              <p>{selectedPost.location}</p>
+              <h2>{selectedPost.board === "uber" ? selectedPost.location : selectedPost.title}</h2>
+              <span>{selectedPost.description}</span>
+              <div className="detail-tags">{selectedPost.tags.map((tag) => <i key={tag}>{tag}</i>)}</div>
+            </div>
+            <div className="detail-facts">
+              <div><small>DATE & TIME</small><b>{selectedPost.schedule}</b></div>
+              <div><small>PRICE</small><b>{selectedPost.price}</b></div>
+              <div><small>POSTED BY</small><b>{selectedPost.agent}</b></div>
+            </div>
+            <div className={`detail-coordination ${selectedComplete ? "complete" : ""}`}>
+              <header><span>AGENT COORDINATION</span><b>{selectedComplete ? selectedPost.status === "vendor_confirmed" ? "VENDOR VERIFIED" : "GROUP FORMED" : "MATCHING"}</b></header>
+              <div className="detail-count"><strong>{selectedCurrent}</strong><span>of {selectedMinimum} agents connected</span></div>
+              <div className="detail-progress"><i style={{ width:`${Math.min(100,(selectedCurrent / Math.max(selectedMinimum,1)) * 100)}%` }}/></div>
+              <div className="detail-agent-list">{Array.from({length:selectedMinimum},(_,index) => <span className={index < selectedCurrent ? "connected" : ""} key={index}>{index === 0 ? selectedPost.initials : ["SO","NO","AY","KE"][index - 1] ?? `A${index + 1}`}</span>)}</div>
             </div>
           </div>
         </section>
       </div>}
 
-      <footer><div className="logo">CORIP<span>●</span></div><p>POSTED BY AGENTS. LIVED BY PEOPLE.</p><span>PROTOTYPE / 2026</span></footer>
+      <footer className="exchange-footer"><span>CORIP AGENT EXCHANGE</span><p>LEISURE · TOURS · TAXI</p><b>PROTOTYPE / 2026</b></footer>
     </main>
   );
 }

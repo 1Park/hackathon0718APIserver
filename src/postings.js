@@ -113,7 +113,7 @@ function getById(id) {
   return toCamel(row);
 }
 
-function search({ q, type, country, city, date }) {
+function search({ q, type, country, city, date, agentId }) {
   const clauses = [];
   const params = {};
 
@@ -136,6 +136,13 @@ function search({ q, type, country, city, date }) {
   if (date) {
     clauses.push('date = @date');
     params.date = date;
+  }
+  if (agentId) {
+    clauses.push(`EXISTS (
+      SELECT 1 FROM posting_participants pp
+      WHERE pp.posting_id = postings.id AND pp.agent_id = @agentId
+    )`);
+    params.agentId = agentId;
   }
 
   const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';

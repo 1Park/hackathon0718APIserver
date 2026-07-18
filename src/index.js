@@ -201,6 +201,7 @@ mcpServer.registerTool(
       country: z.string().optional(),
       city: z.string().optional(),
       date: z.string().optional(),
+      agentId: z.string().optional(),
     },
   },
   async (input) => toolResult(postings.search(input))
@@ -318,8 +319,8 @@ app.post('/postings', (req, res) => {
 
 // Search postings.
 app.get('/postings/search', (req, res) => {
-  const { q, type, country, city, date } = req.query;
-  const results = postings.search({ q, type, country, city, date });
+  const { q, type, country, city, date, agentId } = req.query;
+  const results = postings.search({ q, type, country, city, date, agentId });
   res.json(results);
 });
 
