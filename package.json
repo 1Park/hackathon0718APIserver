@@ -5,7 +5,7 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
-    "dev": "PORT=3080 node --watch --watch-preserve-output src/index.js",
+    "dev": "PORT=3080 node --watch --watch-preserve-output --watch-path=src --watch-path=skills/corip src/index.js",
     "test": "node --test src/*.test.js"
   },
   "dependencies": {
