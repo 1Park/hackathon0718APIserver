@@ -5,6 +5,8 @@ const { StreamableHTTPServerTransport } = require('@modelcontextprotocol/sdk/ser
 const demo = require('./demo-script');
 const liveCorip = require('./live-corip');
 const liveVocalBridge = require('./live-vocalbridge');
+const postings = require('./postings');
+const { watchPosting } = require('./watch-posting');
 
 const app = express();
 app.use(express.json());
@@ -57,6 +59,103 @@ function liveResult(value) {
     structuredContent: value,
   };
 }
+
+function postingResult(value) {
+  return liveResult(value);
+}
+
+function postingError(message) {
+  return {
+    isError: true,
+    content: [{ type: 'text', text: JSON.stringify({ error: message }) }],
+  };
+}
+
+// Production posting tools used by Personal Agents and the live demo wrappers.
+mcpServer.registerTool('search_postings', {
+  description: 'Search Corip postings.',
+  inputSchema: {
+    q: z.string().optional(), type: z.enum(postings.VALID_TYPES).optional(),
+    country: z.string().optional(), city: z.string().optional(),
+    date: z.string().optional(), agentId: z.string().optional(),
+  },
+}, async (input) => postingResult(postings.search(input)));
+
+mcpServer.registerTool('get_posting', {
+  description: 'Get one Corip posting.',
+  inputSchema: { id: z.union([z.string(), z.number()]) },
+}, async ({ id }) => {
+  const posting = postings.getById(id);
+  return posting ? postingResult(posting) : postingError('Posting not found');
+});
+
+mcpServer.registerTool('create_posting', {
+  description: 'Create a Corip posting. The owner is participant one.',
+  inputSchema: {
+    type: z.enum(postings.VALID_TYPES), title: z.string().optional(), description: z.string().optional(),
+    country: z.string(), city: z.string(), place: z.string().optional(),
+    departure: z.string().optional(), destination: z.string().optional(),
+    date: z.string(), time: z.string(), minPeople: z.number().int().positive(),
+    maxPeople: z.number().int().positive(), price: z.number(), agentId: z.string(),
+  },
+}, async (input) => {
+  const error = postings.validateCreateInput(input);
+  return error ? postingError(error) : postingResult(postings.create(input));
+});
+
+mcpServer.registerTool('join_posting', {
+  description: 'Join one Personal Agent to a posting idempotently.',
+  inputSchema: { id: z.union([z.string(), z.number()]), agentId: z.string() },
+}, async ({ id, agentId }) => {
+  const value = postings.join(id, agentId);
+  if (!value) return postingError('Posting not found');
+  return value.error ? postingError(value.error) : postingResult(value);
+});
+
+mcpServer.registerTool('confirm_posting_with_vendor', {
+  description: 'Complete an under-minimum tour or leisure posting after VocalBridge approval.',
+  inputSchema: {
+    id: z.union([z.string(), z.number()]), agentId: z.string(),
+    source: z.literal('vocal_bridge'), note: z.string().optional(),
+  },
+}, async ({ id, agentId, source, note }) => {
+  const value = postings.confirmByVendor(id, { agentId, source, note });
+  if (!value) return postingError('Posting not found');
+  return value.error ? postingError(value.error) : postingResult(value);
+});
+
+mcpServer.registerTool('delete_posting', {
+  description: 'Delete an owned Corip posting.',
+  inputSchema: { id: z.union([z.string(), z.number()]), agentId: z.string() },
+}, async ({ id, agentId }) => {
+  const state = postings.remove(id, agentId);
+  if (state === 'not_found') return postingError('Posting not found');
+  if (state === 'forbidden') return postingError('Only the posting owner can delete it');
+  return postingResult({ id: Number(id), deleted: true });
+});
+
+mcpServer.registerTool('watch_posting', {
+  description: 'Long-poll a Corip posting for participant or completion changes.',
+  inputSchema: {
+    id: z.union([z.string(), z.number()]), lastKnownPeople: z.number().int().nonnegative(),
+    timeoutSeconds: z.number().int().min(3).max(120).optional(),
+  },
+}, async ({ id, lastKnownPeople, timeoutSeconds }) => postingResult(
+  await watchPosting(postings.getById, id, lastKnownPeople, timeoutSeconds ?? 30)
+));
+
+mcpServer.registerTool('get_agent_notifications', {
+  description: 'Get completion notifications for a Personal Agent.',
+  inputSchema: { agentId: z.string(), afterId: z.number().int().nonnegative().optional() },
+}, async ({ agentId, afterId }) => postingResult(postings.listNotifications(agentId, afterId ?? 0)));
+
+mcpServer.registerTool('acknowledge_notification', {
+  description: 'Mark a Personal Agent notification as read.',
+  inputSchema: { notificationId: z.union([z.string(), z.number()]), agentId: z.string() },
+}, async ({ notificationId, agentId }) => {
+  const value = postings.acknowledgeNotification(notificationId, agentId);
+  return value ? postingResult(value) : postingError('Notification not found');
+});
 
 mcpServer.registerResource(
   'corip-demo-script',
@@ -268,6 +367,52 @@ app.post('/mcp', async (req, res) => {
   res.on('close', () => transport.close());
   await mcpServer.connect(transport);
   await transport.handleRequest(req, res, req.body);
+});
+
+app.post('/postings', (req, res) => {
+  const error = postings.validateCreateInput(req.body);
+  if (error) return res.status(400).json({ error });
+  return res.status(201).json(postings.create(req.body));
+});
+
+app.get('/postings/search', (req, res) => {
+  const { q, type, country, city, date, agentId } = req.query;
+  res.json(postings.search({ q, type, country, city, date, agentId }));
+});
+
+app.get('/postings/:id', (req, res) => {
+  const posting = postings.getById(req.params.id);
+  return posting ? res.json(posting) : res.status(404).json({ error: 'Posting not found' });
+});
+
+app.get('/postings/:id/delivery-status', (req, res) => {
+  const value = postings.getDeliveryStatus(req.params.id);
+  return value ? res.json(value) : res.status(404).json({ error: 'Posting not found' });
+});
+
+app.post('/postings/:id/join', (req, res) => {
+  const value = postings.join(req.params.id, req.body.agentId);
+  if (!value) return res.status(404).json({ error: 'Posting not found' });
+  return value.error ? res.status(400).json(value) : res.json(value);
+});
+
+app.post('/postings/:id/confirm', (req, res) => {
+  const value = postings.confirmByVendor(req.params.id, req.body);
+  if (!value) return res.status(404).json({ error: 'Posting not found' });
+  return value.error ? res.status(400).json(value) : res.json(value);
+});
+
+app.delete('/postings/:id', (req, res) => {
+  const state = postings.remove(req.params.id, req.body.agentId);
+  if (state === 'not_found') return res.status(404).json({ error: 'Posting not found' });
+  if (state === 'forbidden') return res.status(403).json({ error: 'Only the posting owner can delete it' });
+  return res.json({ id: Number(req.params.id), deleted: true });
+});
+
+app.get('/agents/:agentId/notifications', (req, res) => {
+  const afterId = Number(req.query.afterId ?? 0);
+  if (!Number.isInteger(afterId) || afterId < 0) return res.status(400).json({ error: 'Invalid afterId' });
+  return res.json(postings.listNotifications(req.params.agentId, afterId));
 });
 
 app.use((err, req, res, _next) => {

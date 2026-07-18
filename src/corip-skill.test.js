@@ -8,7 +8,7 @@ const skill = fs.readFileSync(path.join(__dirname, '..', 'skills', 'corip', 'SKI
 const agents = fs.readFileSync(path.join(__dirname, '..', 'AGENTS.md'), 'utf8');
 const server = fs.readFileSync(path.join(__dirname, 'index.js'), 'utf8');
 
-test('demo MCP exposes fifteen scene tools and four live wrappers', () => {
+test('demo MCP exposes scene tools, live wrappers, and production posting tools', () => {
   const expected = [
     'sync_live_demo_postings',
     'confirm_live_kayak_posting',
@@ -31,7 +31,9 @@ test('demo MCP exposes fifteen scene tools and four live wrappers', () => {
     'get_final_trip_summary',
   ];
   for (const tool of expected) assert.match(server, new RegExp(`'${tool}'`));
-  assert.doesNotMatch(server, /registerTool\(\s*'create_posting'/);
+  for (const tool of ['search_postings', 'get_posting', 'create_posting', 'join_posting', 'confirm_posting_with_vendor', 'delete_posting', 'watch_posting', 'get_agent_notifications', 'acknowledge_notification']) {
+    assert.match(server, new RegExp(`registerTool\\(\\s*'${tool}'`));
+  }
   assert.doesNotMatch(server, /corip_approve_email_sync/);
 });
 
