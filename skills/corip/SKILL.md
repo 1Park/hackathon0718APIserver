@@ -30,7 +30,7 @@ Accept a different Corip endpoint only when the user explicitly supplies it. Req
 
 When the user says “plan my trip,” “find something for me to do,” or an equivalent request, complete the routine workflow without asking whether to proceed at each stage.
 
-1. Start from the trip context supplied by the user, the current session, or mock input. Do not search an email inbox. Use known dates, location, reservations, preferences, budget, party size, and free time; ask only when a required value cannot be inferred safely.
+1. Before asking any clarification, read the normalized context already produced by synchronization: `travel/corip/plans/`, `travel/corip/interests.md`, and relevant current-session or mock input. Do not reopen or search an email inbox. Use known dates, location, reservations, preferences, budget, party size, and free time; ask only when a required value remains missing after these sources are checked.
 2. Start web or travel-tool research immediately. Internally compare a small set of viable options and select the strongest option from the traveler's known interests and constraints. Do not make the user choose unless there is a material unresolved tradeoff.
 3. Before creating anything, call `search_postings` for a compatible `tour`, `leisure`, or `taxi` posting. Send only the minimum non-sensitive destination, date, type, place, or route fields.
 4. If a compatible posting exists, refresh it with `get_posting`. When it is within capacity and satisfies all constraints, call `join_posting` without another confirmation question and record locally that this agent joined it.
@@ -165,14 +165,14 @@ Verify each item independently:
 
 Return a concise table with `Component`, `Status`, and `Evidence / next action`. Use only `complete`, `action required`, `blocked`, or `skipped by user`. Never call the overall setup complete while a required item is unresolved.
 
-## Plan a trip from supplied context
+## Plan a trip from synchronized context
 
 Use this workflow whenever the user asks for a travel plan, itinerary, destination recommendation, activity plan, or transportation plan.
 
-1. Read the trip details supplied by the user, current session, or mock event. Do not inspect or search email.
-2. Treat supplied reservations and explicit constraints as hard facts. Treat inferred interests as soft preferences.
+1. Before asking the user anything, inspect `travel/corip/plans/` for a trip matching the requested date or destination and read `travel/corip/interests.md` when present. Also use trip details supplied by the user, current session, or mock event. Do not inspect or search the email inbox during planning.
+2. Treat synchronized reservations and explicit constraints as hard facts. Treat inferred interests as soft preferences.
 3. Let the user's latest explicit request override stored summaries and interests. Surface material conflicts instead of silently choosing an older value.
-4. Ask only for required facts that cannot be safely inferred; never invent prior preferences.
+4. Ask only for required facts that remain unavailable after checking synchronized artifacts and current context. Never ask for a value already present there and never invent prior preferences.
 5. Build the plan around confirmed dates, transport, lodging, activities, budget, party size, unresolved questions, and the strongest supported interests.
 6. Use Sabre, when configured, to fill flight gaps. Use Corip to search matching tour, leisure, and taxi postings. Send only the minimum destination, date, type, place, or route fields needed by each external service.
 7. Refresh a selected Corip result with `get_posting`. If it is compatible and within capacity, join it immediately. If no compatible posting exists, create one immediately when all required fields are known. Record the posting in `travel/corip/active-postings.json` and start monitoring it. Do not ask for another routine confirmation after the user requested the trip plan.

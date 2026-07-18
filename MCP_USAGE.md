@@ -162,7 +162,7 @@ Deletion is irreversible. Refresh the posting, verify ownership, and obtain expl
 
 ### Autonomous trip planning and coordination
 
-1. When the user asks for a trip plan, start from the trip details supplied by the user, current session, or mock input. Do not search email.
+1. When the user asks for a trip plan, first read matching normalized artifacts in `travel/corip/plans/` and `travel/corip/interests.md`, then use current-session or mock input. Do not reopen or search email during planning.
 2. Begin web or travel-tool research immediately without asking whether to proceed. Internally compare viable candidates and select the strongest one from known constraints.
 3. Call `search_postings` for a compatible posting before creating anything.
 4. If a compatible posting exists, refresh it with `get_posting` and join it automatically when it is within capacity and all traveler constraints are known.
