@@ -30,7 +30,7 @@ MCP 연결은 툴을 제공하고, Skill은 OpenClaw가 그 툴을 언제 사용
 openclaw skills install ./skills/corip --as corip
 ```
 
-설치 후 새 세션을 시작하고 `openclaw skills list`에서 `corip`이 보이는지 확인한다. MCP에만 연결된 환경은 `docs://corip-skill` 리소스에서 동일한 `SKILL.md` 내용을 읽을 수 있다. Skill 설치는 사용자의 확인 없이 기존 파일을 덮어쓰지 않는다.
+설치 후 새 세션을 시작하고 `openclaw skills list`에서 `corip`이 보이는지 확인한다. MCP에만 연결된 환경은 `skill://corip/SKILL.md` 리소스에서 동일한 `SKILL.md` 내용을 읽을 수 있다. 이전 클라이언트를 위한 `docs://corip-skill` 별칭도 같은 내용을 반환한다. Skill 설치는 사용자의 확인 없이 기존 파일을 덮어쓰지 않는다.
 
 ## 2. 데이터 모델
 

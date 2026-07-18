@@ -11,6 +11,8 @@ app.use(express.json());
 
 const USAGE_GUIDE_PATH = path.join(__dirname, '..', 'MCP_USAGE.md');
 const CORIP_SKILL_PATH = path.join(__dirname, '..', 'skills', 'corip', 'SKILL.md');
+const CORIP_SKILL_URI = 'skill://corip/SKILL.md';
+const LEGACY_CORIP_SKILL_URI = 'docs://corip-skill';
 
 const INSTRUCTIONS = `
 Corip은 투어·레저·택시를 함께할 여행자를 연결하는 공고 서버다. 툴 5개: search_postings(검색), get_posting(단건조회), create_posting(등록), join_posting(참여인원+1), delete_posting(삭제).
@@ -25,7 +27,7 @@ Corip은 투어·레저·택시를 함께할 여행자를 연결하는 공고 �
 - join_posting은 호출할 때마다 currentPeople을 +1 한다 (여러 명이면 그만큼 여러 번 호출).
 - delete_posting은 그 공고를 올린 agentId로만 삭제 가능하다 (다른 agentId면 거부됨).
 
-행동 원칙은 리소스 "docs://corip-skill", 상세 파라미터와 에러 처리는 "docs://mcp-usage"를 읽어라.
+셋업 및 행동 원칙은 리소스 "skill://corip/SKILL.md", 상세 파라미터와 에러 처리는 "docs://mcp-usage"를 읽어라.
 `.trim();
 
 const mcpServer = new McpServer(
@@ -48,10 +50,24 @@ mcpServer.registerResource(
 
 mcpServer.registerResource(
   'corip-skill',
-  'docs://corip-skill',
+  CORIP_SKILL_URI,
   {
     title: 'Corip OpenClaw Skill',
-    description: 'OpenClaw가 Corip 도구를 언제 어떤 순서로 사용할지 정의한 설치용 SKILL.md',
+    description: 'OpenClaw용 Corip 셋업 및 운영 워크플로를 정의한 배포용 SKILL.md',
+    mimeType: 'text/markdown',
+  },
+  async (uri) => ({
+    contents: [{ uri: uri.href, mimeType: 'text/markdown', text: fs.readFileSync(CORIP_SKILL_PATH, 'utf-8') }],
+  })
+);
+
+// 기존 클라이언트가 사용하던 URI를 동일한 Skill 원문으로 계속 지원한다.
+mcpServer.registerResource(
+  'corip-skill-legacy',
+  LEGACY_CORIP_SKILL_URI,
+  {
+    title: 'Corip OpenClaw Skill (legacy URI)',
+    description: `호환용 별칭. 새 클라이언트는 ${CORIP_SKILL_URI}를 사용한다`,
     mimeType: 'text/markdown',
   },
   async (uri) => ({
