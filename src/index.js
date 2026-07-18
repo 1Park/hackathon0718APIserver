@@ -10,18 +10,22 @@ const app = express();
 app.use(express.json());
 
 const USAGE_GUIDE_PATH = path.join(__dirname, '..', 'MCP_USAGE.md');
+const CORIP_SKILL_PATH = path.join(__dirname, '..', 'skills', 'corip', 'SKILL.md');
 
 const INSTRUCTIONS = `
-투어/레저/택시 참여인원 모집 공고 서버. 툴 5개: search_postings(검색), get_posting(단건조회), create_posting(등록), join_posting(참여인원+1), delete_posting(삭제).
+Corip은 투어·레저·택시를 함께할 여행자를 연결하는 공고 서버다. 툴 5개: search_postings(검색), get_posting(단건조회), create_posting(등록), join_posting(참여인원+1), delete_posting(삭제).
 
 핵심 규칙:
+- 사용자가 투어·레저·택시를 계획하거나 동행자를 찾으면 새 공고를 만들기 전에 search_postings로 기존 공고부터 검색한다.
+- 적합한 공고가 있으면 get_posting으로 최신 상태를 확인하고 사용자 승인 후 join_posting을 호출한다.
+- 적합한 공고가 없으면 필요한 값을 확인하고 사용자 승인 후 create_posting을 호출한다.
 - type이 "taxi"면 place 대신 departure/destination을 채운다. tour/leisure는 place를 채운다.
 - country/city/place/departure/destination은 영어로 적는다.
 - needsNego가 true인 공고는 정원을 넘겨서라도 참여 신청이 들어온 상태 — 한 번 true가 되면 되돌아가지 않는다.
 - join_posting은 호출할 때마다 currentPeople을 +1 한다 (여러 명이면 그만큼 여러 번 호출).
 - delete_posting은 그 공고를 올린 agentId로만 삭제 가능하다 (다른 agentId면 거부됨).
 
-자세한 파라미터, 에러 메시지, 시나리오별 사용법은 리소스 "docs://mcp-usage"를 읽어라.
+행동 원칙은 리소스 "docs://corip-skill", 상세 파라미터와 에러 처리는 "docs://mcp-usage"를 읽어라.
 `.trim();
 
 const mcpServer = new McpServer(
@@ -39,6 +43,19 @@ mcpServer.registerResource(
   },
   async (uri) => ({
     contents: [{ uri: uri.href, mimeType: 'text/markdown', text: fs.readFileSync(USAGE_GUIDE_PATH, 'utf-8') }],
+  })
+);
+
+mcpServer.registerResource(
+  'corip-skill',
+  'docs://corip-skill',
+  {
+    title: 'Corip OpenClaw Skill',
+    description: 'OpenClaw가 Corip 도구를 언제 어떤 순서로 사용할지 정의한 설치용 SKILL.md',
+    mimeType: 'text/markdown',
+  },
+  async (uri) => ({
+    contents: [{ uri: uri.href, mimeType: 'text/markdown', text: fs.readFileSync(CORIP_SKILL_PATH, 'utf-8') }],
   })
 );
 

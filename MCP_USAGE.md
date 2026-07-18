@@ -4,7 +4,7 @@
 
 ## 1. 접속 정보
 
-- MCP 엔드포인트: `https://a2apractice-postings.fly.dev/mcp`
+- MCP 엔드포인트: `https://corip-postings-kimmc3423.fly.dev/mcp`
 - Transport: Streamable HTTP (stateless — 세션 유지 없이 매 요청 독립적으로 처리됨)
 - 인증 없음 (누구나 호출 가능한 테스트 서버, 실데이터 아님)
 
@@ -14,13 +14,23 @@ MCP 클라이언트 설정 파일을 쓰는 구조라면 아래처럼 등록:
 {
   "mcpServers": {
     "postings": {
-      "url": "https://a2apractice-postings.fly.dev/mcp"
+      "url": "https://corip-postings-kimmc3423.fly.dev/mcp"
     }
   }
 }
 ```
 
 등록 후 `tools/list`를 호출하면 아래 5개 툴이 보인다.
+
+### OpenClaw에 Corip Skill 설치
+
+MCP 연결은 툴을 제공하고, Skill은 OpenClaw가 그 툴을 언제 사용할지 알려준다. 이 저장소를 받은 환경에서는 다음 명령으로 설치한다.
+
+```bash
+openclaw skills install ./skills/corip --as corip
+```
+
+설치 후 새 세션을 시작하고 `openclaw skills list`에서 `corip`이 보이는지 확인한다. MCP에만 연결된 환경은 `docs://corip-skill` 리소스에서 동일한 `SKILL.md` 내용을 읽을 수 있다. Skill 설치는 사용자의 확인 없이 기존 파일을 덮어쓰지 않는다.
 
 ## 2. 데이터 모델
 
