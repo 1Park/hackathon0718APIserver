@@ -9,13 +9,13 @@ Run a deterministic presentation with narrowly scoped live effects: Corip produc
 
 ## Non-negotiable demo rules
 
-1. Use `corip` for staged scene output and its deterministic live-posting wrapper tools, and `vocalbridge` only for the approved negotiation calls below. Do not directly orchestrate individual `corip-live` mutations. Do not browse, inspect Gmail, charge money, alter a real calendar, create real cron jobs, open OAuth pages, or call PayPal, Sabre, Viator, or any other live connector.
-2. Treat each MCP response as the canonical scene. On Telegram, ignore the temptation to send `persistentMessage`, `persistentMessages`, and `approval` separately. Use the response's complete `telegramDelivery` object as the single outbound message for that scene.
-3. Present `simulatedToolTrace` as temporary working/tool/result activity when the channel supports tool progress. These are role-play traces, not real service calls. Do not add disclaimers during the demo unless the user explicitly asks how it is implemented.
-4. On Telegram, call the message tool exactly once per completed scene result using `telegramDelivery.action`, `telegramDelivery.message`, and `telegramDelivery.presentation`. The `message` argument is mandatory. This one send must contain all persistent messages, the next approval title/body, and all buttons. Do not send an earlier subsection first. Return `NO_REPLY` only after the complete delivery succeeds.
+1. Use `corip` for staged scene output, its deterministic live-posting wrappers, and its `run_live_operator_calls` wrapper. The latter connects directly to the fixed VocalBridge MCP URL. Do not directly orchestrate individual `corip-live` or `vocalbridge` calls. Do not browse, inspect Gmail, charge money, alter a real calendar, create real cron jobs, open OAuth pages, or call PayPal, Sabre, Viator, or any other live connector.
+2. Before every meaningful tool group, emit one brief assistant commentary update of one sentence and at most 100 characters, such as `Checking your confirmed reservations…`. This is a non-terminal progress update: the very next action must be the mapped MCP tool call, never a final response or `NO_REPLY`.
+3. Never use the `message` tool for Thinking, Working, status, or tool-progress output. Native Telegram progress streaming renders commentary and tool calls in a temporary preview while the same agent turn continues. Do not emit `⏳ Working…`, headings, a list of future tools, simulated results, or a large prewritten Thinking block.
+4. Use `message.send` exactly once only after the scene action, approved live wrappers, and immediate continuations all finish. Send the response's complete `telegramDelivery.message` and `telegramDelivery.presentation`, including all persistent text and the next approval buttons. Return `NO_REPLY` only after this final send succeeds.
 5. When interactive buttons are unavailable, render the exact labels as bracketed choices. Do not turn the choice into a generic prose question.
 6. Treat `callback_data: corip_demo:<value>` as the user's selection. Before any next MCP call, consume the most recent approval card: find the `messageId` returned by the most recent successful approval `message.send`, then call `message` action `edit` on that message with the same text plus `\n\n✓ Selected: <button label>` and a presentation containing text only—no buttons block. This removes the inline keyboard. Then call the mapped MCP tool in the same turn. Do not ask the user to repeat the label. Ignore duplicate callbacks for an already consumed card with `NO_REPLY`.
-7. When an MCP response includes `continueImmediately`, do not send its `telegramDelivery` yet. Call the named Corip demo tool in the same turn, combine both deliveries' text in order, attach only the last approval button block, and perform one message send after the continuation chain ends. This is mandatory after `confirm_hotel_rebooking`, which flows directly into Scene 3.
+7. When an MCP response includes `continueImmediately`, do not send its `telegramDelivery` yet. Emit at most one new short commentary update if the work stage materially changes, call the named Corip demo tool in the same turn, combine both deliveries' text in order, attach only the last approval button block, and send once after the continuation chain ends. This is mandatory after `confirm_hotel_rebooking`, which flows directly into Scene 3.
 8. Never skip approval boundaries. Do not perform a Corip POST or VocalBridge call until its matching scripted button is selected. The initial setup and email/Sabre/payment results remain staged.
 9. Do not mention the retired production workflow, plugin implementation, trust policy, or real cron/heartbeat state during the performance.
 
@@ -38,7 +38,7 @@ Use this exact state transition table:
 | Research Saturday activities; start Scene 3 | `get_saturday_candidates` | Candidate message, then Select activities buttons |
 | `corip_demo:continue` or `Continue` | `sync_live_demo_postings(stage="initial")`, then `register_saturday_plan(selection="all")` | Real website sync, then working trace, registered plan, reservation status |
 | Two days later; check participants; continue Scene 5 | `sync_live_demo_postings(stage="two_days_later")`, then `get_participant_status` | Real website count sync, then status trace, attention message, Allow outbound calls buttons |
-| `corip_demo:allow_calls` or `Allow Calls` | Two live VocalBridge calls, `confirm_live_kayak_posting`, then `complete_operator_calls(decision="allow_calls")` | Real calls/vendor confirmation, then call results and Confirm kayak tour buttons |
+| `corip_demo:allow_calls` or `Allow Calls` | `run_live_operator_calls(decision="allow_calls")`, `confirm_live_kayak_posting`, then `complete_operator_calls(decision="allow_calls")` | Two direct real calls/vendor confirmation, then call results and Confirm kayak tour buttons |
 | `corip_demo:confirm_72` or `Confirm $72.00` | `confirm_kayak_tour(amount=72)` | Reservation trace, kayak confirmation, Balboa Park decision buttons |
 | `corip_demo:cancel_balboa` or `Cancel Activity` | `cancel_live_balboa_posting`, then `cancel_balboa_activity(decision="cancel_activity")` | Real website deletion, then cancellation trace and cancellation message |
 | Final trip summary; Scene 6 | `get_final_trip_summary` | Exact Saturday section and completed-actions list |
@@ -77,16 +77,16 @@ Before showing the cancellation result, call `cancel_live_balboa_posting`. It de
 
 ## Live VocalBridge calls
 
-After `Allow Calls`, call `vocalbridge.negotiate_reservation` twice before `complete_operator_calls`. Supply all seven required fields exactly:
+After `Allow Calls`, call `run_live_operator_calls(decision="allow_calls")`. This local wrapper connects directly to `https://extent-prospective-ext-condition.trycloudflare.com/mcp` and invokes `negotiate_reservation` twice with all seven required fields exactly:
 
 1. Kayak: country `United States`; city `San Diego`; location `La Jolla Shores`; activity_date `2026-07-25 09:00`; min_participants `4`; current_participants `3`; provider_phone `+1-619-555-0147`.
 2. Balboa: country `United States`; city `San Diego`; location `Balboa Park Visitors Center`; activity_date `2026-07-25 14:30`; min_participants `6`; current_participants `2`; provider_phone `+1-619-555-0182`.
 
-The current VocalBridge server deliberately dials its fixed demo override number; `provider_phone` is required activity context. Capture each returned `session_id`. Call `get_negotiation_result` only when the initial response is incomplete or needs re-fetching. Display the canonical scripted call results regardless of GET wording, but report a real call failure instead of falsely claiming completion.
+The current VocalBridge server deliberately dials its fixed demo override number; `provider_phone` is required activity context. Do not separately call a `vocalbridge` namespace: the wrapper owns the direct connection and both calls. Display the canonical scripted call results regardless of returned wording, but report a real call failure instead of falsely claiming completion.
 
 ## Persistent button cards
 
-The MCP already composes this object. Pass it to the message tool without splitting or rewriting:
+The MCP already composes the final object. Send it only after all work is complete, without splitting or rewriting:
 
 ```json
 {
@@ -96,7 +96,7 @@ The MCP already composes this object. Pass it to the message tool without splitt
 }
 ```
 
-Never omit `message`; Telegram rejects presentation-only sends. Record the returned `messageId` as the current approval message when `telegramDelivery.approvalMessage` is true. Once a button is clicked, edit that exact message to remove the buttons before continuing.
+Never omit `message`; Telegram rejects presentation-only sends. Record the returned `messageId` as the current approval message when `telegramDelivery.approvalMessage` is true. Once a button is clicked, edit that exact message to remove its buttons, emit the next short commentary update, and continue with the mapped tool call in the same turn.
 
 ## Demo truth boundary
 

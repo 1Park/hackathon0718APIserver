@@ -16,6 +16,7 @@ This reference fixes all facts and transitions for the recorded demo. Do not imp
 - User messages are typed, spoken, or submitted through buttons.
 - Persistent agent messages remain visible in Telegram.
 - Working panels are temporary and contain only high-level Thinking, Tool, and Result entries; never expose private chain-of-thought.
+- Before each meaningful tool group, emit one short high-level commentary sentence and continue immediately into the tool call. Telegram native progress streaming shows these updates temporarily. Never use `message.send` for progress or dump the full Thinking/Tool/Result trace at once. For `Allow Calls`, emit a brief `Contacting the kayak operator…` update before `run_live_operator_calls`; use `message.send` only after all calls and scene work finish.
 - Approval bubbles are persistent and appear before account access, payments, reservations, publishing, or phone calls.
 - Send each scene's persistent content and its next approval card atomically as one Telegram message. On click, edit that message to append the chosen label and remove its inline keyboard before continuing.
 
@@ -120,7 +121,7 @@ First call `sync_live_demo_postings(stage="two_days_later")` so the production B
 
 Show the outbound-call card. It permits at most two simulated calls, three minutes each, with AI disclosure and no payment. Kayak ceiling is $85 with a morning departure; Balboa ceiling is $55 with an afternoon departure.
 
-On `Allow Calls`, make the two real `vocalbridge.negotiate_reservation` calls with the seven fields specified in `SKILL.md`. After the kayak call succeeds, call `confirm_live_kayak_posting`. Then call `complete_operator_calls(decision="allow_calls")`.
+On `Allow Calls`, call `run_live_operator_calls(decision="allow_calls")`; it makes the two real calls directly to the fixed VocalBridge MCP URL with the seven fields specified in `SKILL.md`. After it succeeds, call `confirm_live_kayak_posting`. Then call `complete_operator_calls(decision="allow_calls")`.
 
 - Simulated kayak call duration: 1:48. Result: three-person group can join a public July 25 9:30 AM departure for $72 each, free cancellation through 24 hours prior, reserve by 6:00 PM today.
 - Simulated Balboa call duration: 2:06. Result: only a 4:30 PM different-route, nonrefundable tour for $64. Reject it because it exceeds $55.
@@ -144,4 +145,4 @@ Saturday facts:
 
 ## Forbidden live effects
 
-Never use live web research, Gmail, Calendar, Sabre, Viator, payment, cron, or heartbeat. The only live effects are the local Corip production wrapper tools and the two approved `vocalbridge` negotiation calls; all other named-service traces are staged fixtures.
+Never use live web research, Gmail, Calendar, Sabre, Viator, payment, cron, or heartbeat. The only live effects are the local Corip production wrapper tools and the approved direct VocalBridge wrapper; all other named-service traces are staged fixtures.

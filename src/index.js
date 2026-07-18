@@ -4,6 +4,7 @@ const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
 const { StreamableHTTPServerTransport } = require('@modelcontextprotocol/sdk/server/streamableHttp.js');
 const demo = require('./demo-script');
 const liveCorip = require('./live-corip');
+const liveVocalBridge = require('./live-vocalbridge');
 
 const app = express();
 app.use(express.json());
@@ -19,11 +20,11 @@ const INSTRUCTIONS = `
 Corip is running in hybrid demo mode for the complete July 24-26 San Diego itinerary, Scenes 1 through 6.
 
 Mandatory behavior:
-- Keep all GET/research/account/payment/calendar results staged. The only live effects are the explicitly approved Corip production MCP posting mutations and VocalBridge MCP negotiation calls described by the Corip skill.
+- Keep all GET/research/account/payment/calendar results staged. The only live effects are the explicitly approved Corip production MCP posting mutations and two VocalBridge calls made directly by this server to https://extent-prospective-ext-condition.trycloudflare.com/mcp.
 - Use only the Corip demo tools exposed by this server for Scenes 1 through 6.
 - Treat every tool result as the authoritative script. Render its persistent message verbatim except for harmless channel formatting.
 - When a result contains an approval object, send one persistent interactive message with the supplied title, body, and buttons. On Telegram use semantic presentation buttons or inline buttons. Do not replace buttons with a prose question when buttons are available.
-- On Telegram, use telegramDelivery as one atomic message.send with both its non-empty message and presentation arguments. Never send persistentMessage/persistentMessages first and stop. Return NO_REPLY only after this complete delivery succeeds.
+- On Telegram, emit one short high-level commentary sentence before each meaningful tool group. Native Telegram progress streaming renders it as a temporary preview. Never call message.send for progress, never dump the whole scripted trace at once, and continue immediately into the tool calls. Use message.send only for the complete final telegramDelivery after all work finishes.
 - Button callback values are user choices. Map them to the next tool exactly as described by the tool result.
 - Before following a callback, edit the most recent approval messageId to preserve its text, append the selected label, and remove its buttons. Ignore duplicate callbacks for an already consumed message.
 - When a tool result contains continueImmediately, call that named Corip demo tool in the same turn before sending the combined persistent output. Do not wait for another user message.
@@ -112,6 +113,15 @@ mcpServer.registerTool(
     inputSchema: {},
   },
   async () => liveResult(await liveCorip.cancelBalboa())
+);
+
+mcpServer.registerTool(
+  'run_live_operator_calls',
+  {
+    description: 'After Allow Calls only, connect directly to the fixed VocalBridge MCP URL and make the two approved negotiation calls with all seven required activity fields.',
+    inputSchema: { decision: z.literal('allow_calls') },
+  },
+  async () => liveResult(await liveVocalBridge.runOperatorCalls())
 );
 
 mcpServer.registerTool(
@@ -216,7 +226,7 @@ mcpServer.registerTool(
 mcpServer.registerTool(
   'complete_operator_calls',
   {
-    description: 'Scene 5.3: after Allow Calls, simulate both VocalBridge calls and return results plus the kayak confirmation card.',
+    description: 'Scene 5.3: after the direct live VocalBridge wrapper succeeds, return the canonical call results plus the kayak confirmation card.',
     inputSchema: { decision: z.literal('allow_calls') },
   },
   async () => result(demo.SCENES.operatorCalls)

@@ -8,11 +8,12 @@ const skill = fs.readFileSync(path.join(__dirname, '..', 'skills', 'corip', 'SKI
 const agents = fs.readFileSync(path.join(__dirname, '..', 'AGENTS.md'), 'utf8');
 const server = fs.readFileSync(path.join(__dirname, 'index.js'), 'utf8');
 
-test('demo MCP exposes fifteen scene tools and three deterministic live wrappers', () => {
+test('demo MCP exposes fifteen scene tools and four live wrappers', () => {
   const expected = [
     'sync_live_demo_postings',
     'confirm_live_kayak_posting',
     'cancel_live_balboa_posting',
+    'run_live_operator_calls',
     'begin_initial_setup',
     'connect_corip',
     'enable_travel_email_workflow',
@@ -98,6 +99,10 @@ test('skill and standing order restrict live effects and enforce buttons', () =>
     assert.match(source, /Cancel Activity/);
     assert.match(source, /messageId/);
     assert.match(source, /remove the buttons|remove its buttons/i);
+    assert.match(source, /commentary/);
+    assert.match(source, /at most 100 characters/);
+    assert.match(source, /Never (?:use|call).*message.*progress/i);
+    assert.match(source, /very next action|immediately continue/i);
   }
 });
 
@@ -106,7 +111,7 @@ test('hybrid demo declares the real Corip POST and VocalBridge contracts', () =>
   assert.match(skill, /sync_live_demo_postings\(stage="two_days_later"\)/);
   assert.match(skill, /confirm_live_kayak_posting/);
   assert.match(skill, /cancel_live_balboa_posting/);
-  assert.match(skill, /vocalbridge\.negotiate_reservation/);
+  assert.match(skill, /run_live_operator_calls\(decision="allow_calls"\)/);
   for (const field of [
     'country',
     'city',
@@ -116,6 +121,25 @@ test('hybrid demo declares the real Corip POST and VocalBridge contracts', () =>
     'current_participants',
     'provider_phone',
   ]) assert.match(skill, new RegExp(field));
+});
+
+test('VocalBridge wrapper calls the fixed MCP directly with all required fields', () => {
+  const vocal = fs.readFileSync(path.join(__dirname, 'live-vocalbridge.js'), 'utf8');
+  assert.match(vocal, /https:\/\/extent-prospective-ext-condition\.trycloudflare\.com\/mcp/);
+  assert.match(vocal, /name: 'negotiate_reservation'/);
+  assert.match(vocal, /timeout: 300_000/);
+  for (const field of [
+    'country',
+    'city',
+    'location',
+    'activity_date',
+    'min_participants',
+    'current_participants',
+    'provider_phone',
+  ]) assert.match(vocal, new RegExp(field));
+  const calls = require('./live-vocalbridge').CALLS;
+  assert.equal(calls.kayak.current_participants, 3);
+  assert.equal(calls.balboa.current_participants, 2);
 });
 
 test('live Corip writer owns deterministic records and exact participant targets', () => {
