@@ -3,7 +3,6 @@ const { z } = require('zod');
 const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
 const { StreamableHTTPServerTransport } = require('@modelcontextprotocol/sdk/server/streamableHttp.js');
 const demo = require('./demo-script');
-const liveCorip = require('./live-corip');
 const liveVocalBridge = require('./live-vocalbridge');
 
 const app = express();
@@ -20,7 +19,7 @@ const INSTRUCTIONS = `
 Corip is running in hybrid demo mode for the complete July 24-26 San Diego itinerary, Scenes 1 through 6.
 
 Mandatory behavior:
-- Keep all GET/research/account/payment/calendar results staged. The only live effects are the explicitly approved Corip production MCP posting mutations and two VocalBridge calls made directly by this server to https://extent-prospective-ext-condition.trycloudflare.com/mcp.
+- Keep all Corip, GET/research/account/payment/calendar results staged. The only live effects are the two approved VocalBridge calls made directly by this server to https://extent-prospective-ext-condition.trycloudflare.com/mcp.
 - Use only the Corip demo tools exposed by this server for Scenes 1 through 6.
 - Treat every tool result as the authoritative script. Render its persistent message verbatim except for harmless channel formatting.
 - When a result contains an approval object, send one persistent interactive message with the supplied title, body, and buttons. On Telegram use semantic presentation buttons or inline buttons. Do not replace buttons with a prose question when buttons are available.
@@ -28,7 +27,7 @@ Mandatory behavior:
 - Button callback values are user choices. Map them to the next tool exactly as described by the tool result.
 - Before following a callback, edit the most recent approval messageId to preserve its text, append the selected label, and remove its buttons. Ignore duplicate callbacks for an already consumed message.
 - When a tool result contains continueImmediately, call that named Corip demo tool in the same turn before sending the combined persistent output. Do not wait for another user message.
-- Do not reveal implementation details during the performance unless the user asks. Calendar, Viator, Gmail, PayPal, Sabre, and booking results remain staged; Corip production POSTs and VocalBridge calls are live.
+- Do not reveal implementation details during the performance unless the user asks. Corip, Calendar, Viator, Gmail, PayPal, Sabre, and booking results remain staged; only VocalBridge calls are live.
 - Do not run real email sync, cron, heartbeat, plugin installation, Gateway restart, marketplace research, Gmail, PayPal, Sabre, Calendar, Viator, or payment tools.
 - Never skip ahead. Never purchase the kayak before the user selects Confirm $72.00. Never cancel Balboa Park before the user selects Cancel Activity.
 
@@ -82,37 +81,6 @@ mcpServer.registerResource(
   async (uri) => ({
     contents: [{ uri: uri.href, mimeType: 'text/markdown', text: demo.readSkill() }],
   })
-);
-
-mcpServer.registerTool(
-  'sync_live_demo_postings',
-  {
-    description: 'Perform the approved real Corip production POST mutations and deterministically synchronize the demo website counts. Use initial only after Continue and two_days_later only during the participant follow-up.',
-    inputSchema: { stage: z.enum(['initial', 'two_days_later']) },
-  },
-  async ({ stage }) => liveResult(
-    stage === 'initial'
-      ? await liveCorip.syncInitialPostings()
-      : await liveCorip.syncTwoDaysLater()
-  )
-);
-
-mcpServer.registerTool(
-  'confirm_live_kayak_posting',
-  {
-    description: 'Only after the human selects Confirm $72.00 following a successful VocalBridge call, perform the real production vendor-confirm POST for the owned kayak demo posting.',
-    inputSchema: {},
-  },
-  async () => liveResult(await liveCorip.confirmKayak())
-);
-
-mcpServer.registerTool(
-  'cancel_live_balboa_posting',
-  {
-    description: 'After Cancel Activity, perform the real production delete POST for only the owned Balboa demo posting.',
-    inputSchema: {},
-  },
-  async () => liveResult(await liveCorip.cancelBalboa())
 );
 
 mcpServer.registerTool(

@@ -8,11 +8,8 @@ const skill = fs.readFileSync(path.join(__dirname, '..', 'skills', 'corip', 'SKI
 const agents = fs.readFileSync(path.join(__dirname, '..', 'AGENTS.md'), 'utf8');
 const server = fs.readFileSync(path.join(__dirname, 'index.js'), 'utf8');
 
-test('demo MCP exposes sixteen scene tools and four live wrappers', () => {
+test('demo MCP exposes sixteen staged scene tools and one live VocalBridge wrapper', () => {
   const expected = [
-    'sync_live_demo_postings',
-    'confirm_live_kayak_posting',
-    'cancel_live_balboa_posting',
     'run_live_operator_calls',
     'begin_initial_setup',
     'connect_corip',
@@ -32,7 +29,6 @@ test('demo MCP exposes sixteen scene tools and four live wrappers', () => {
     'get_final_trip_summary',
   ];
   for (const tool of expected) assert.match(server, new RegExp(`'${tool}'`));
-  assert.doesNotMatch(server, /registerTool\(\s*'create_posting'/);
   assert.doesNotMatch(server, /corip_approve_email_sync/);
 });
 
@@ -94,7 +90,7 @@ test('skill and standing order restrict live effects and enforce buttons', () =>
   for (const source of [skill, agents]) {
     assert.match(source, /hybrid demo/i);
     assert.match(source, /persistent.*(?:interactive|approval)|approval.*persistent/i);
-    assert.match(source, /corip-live/i);
+    assert.match(source, /Corip[\s\S]*(?:staged|scripted)/i);
     assert.match(source, /vocalbridge/i);
     assert.match(source, /Never (?:use|broaden)|remain staged/i);
     assert.match(source, /Confirm \$72\.00/);
@@ -110,15 +106,13 @@ test('skill and standing order restrict live effects and enforce buttons', () =>
   }
 });
 
-test('hybrid demo declares the real Corip POST and VocalBridge contracts', () => {
-  assert.match(skill, /sync_live_demo_postings\(stage="initial"\)/);
-  assert.match(skill, /sync_live_demo_postings\(stage="two_days_later"\)/);
-  assert.match(skill, /confirm_live_kayak_posting/);
-  assert.match(skill, /cancel_live_balboa_posting/);
+test('demo stages every Corip effect and declares only the live VocalBridge contract', () => {
   assert.match(skill, /run_live_operator_calls\(decision="allow_calls"\)/);
   assert.match(skill, /confirm_shared_uber\(amount=15\.5\)/);
-  assert.match(skill, /Confirm \$72\.00[\s\S]*confirm_live_kayak_posting/);
+  assert.match(skill, /Confirm \$72\.00[\s\S]*confirm_kayak_tour/);
   assert.match(skill, /Reaching the required participant count[\s\S]*never automatic reservation or payment/);
+  assert.match(skill, /All Corip searches[\s\S]*script fixtures/);
+  assert.doesNotMatch(skill, /sync_live_demo_postings|confirm_live_kayak_posting|cancel_live_balboa_posting/);
   for (const field of [
     'country',
     'city',
@@ -147,18 +141,4 @@ test('VocalBridge wrapper calls the fixed MCP directly with all required fields'
   const calls = require('./live-vocalbridge').CALLS;
   assert.equal(calls.kayak.current_participants, 3);
   assert.equal(calls.balboa.current_participants, 2);
-});
-
-test('live Corip writer owns deterministic records and exact participant targets', () => {
-  const live = fs.readFileSync(path.join(__dirname, 'live-corip.js'), 'utf8');
-  for (const owner of [
-    'corip-telegram-demo-kayak-owner',
-    'corip-telegram-demo-uber-owner',
-    'corip-telegram-demo-balboa-owner',
-  ]) assert.match(live, new RegExp(owner));
-  assert.match(live, /corip-postings-kimmc3423\.fly\.dev\/mcp/);
-  assert.equal(require('./live-corip').DEFINITIONS.kayak.members.length, 2);
-  assert.equal(require('./live-corip').DEFINITIONS.uber.members.length, 3);
-  assert.equal(require('./live-corip').DEFINITIONS.balboa.members.length, 0);
-  assert.match(live, /delete_posting[\s\S]*definition\.owner/);
 });

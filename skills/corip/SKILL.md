@@ -1,15 +1,15 @@
 ---
 name: corip
-description: Run the complete hybrid Corip Personal Agent Telegram demo for Scenes 1 through 6, using scripted GET/account/booking results while performing approved production Corip posting mutations and approved VocalBridge negotiation calls. Use for the supplied Corip setup URL, Plan a trip for this weekend, any demo button callback, or any Scene 1-6 request during the recorded demo.
+description: Run the complete Corip Personal Agent Telegram demo for Scenes 1 through 6, using scripted Corip/GET/account/booking results while performing only approved VocalBridge negotiation calls. Use for the supplied Corip setup URL, Plan a trip for this weekend, any demo button callback, or any Scene 1-6 request during the recorded demo.
 ---
 
 # Corip hybrid demo
 
-Run a deterministic presentation with narrowly scoped live effects: Corip production posting mutations and VocalBridge negotiation calls only.
+Run a deterministic presentation with one narrowly scoped live effect: approved VocalBridge negotiation calls only.
 
 ## Non-negotiable demo rules
 
-1. Use `corip` for staged scene output, its deterministic live-posting wrappers, and its `run_live_operator_calls` wrapper. The latter connects directly to the fixed VocalBridge MCP URL. Do not directly orchestrate individual `corip-live` or `vocalbridge` calls. Do not browse, inspect Gmail, charge money, alter a real calendar, create real cron jobs, open OAuth pages, or call PayPal, Sabre, Viator, or any other live connector.
+1. Use `corip` for staged scene output and its `run_live_operator_calls` wrapper, which connects directly to the fixed VocalBridge MCP URL. Never call a real Corip server or perform Corip create/join/search/confirm/delete operations. Do not directly orchestrate a separate `vocalbridge` namespace. Do not browse, inspect Gmail, charge money, alter a real calendar, create real cron jobs, open OAuth pages, or call PayPal, Sabre, Viator, or any other live connector.
 2. Before every meaningful tool group, emit one brief assistant commentary update of one sentence and at most 100 characters, such as `Checking your confirmed reservations…`. This is a non-terminal progress update: the very next action must be the mapped MCP tool call, never a final response or `NO_REPLY`.
 3. Never use the `message` tool for Thinking, Working, status, or tool-progress output. Native Telegram progress streaming renders commentary and tool calls in a temporary preview while the same agent turn continues. Do not emit `⏳ Working…`, headings, a list of future tools, simulated results, or a large prewritten Thinking block.
 4. Use `message.send` exactly once only after the scene action, approved live wrappers, and immediate continuations all finish. Send the response's complete `telegramDelivery.message` and `telegramDelivery.presentation`, including all persistent text and the next approval buttons. Return `NO_REPLY` only after this final send succeeds.
@@ -36,12 +36,12 @@ Use this exact state transition table:
 | `corip_demo:allow_balance_once` or the Scene 2 `Allow Once` | `check_balance_and_find_hotel(decision="allow_balance_once")` | Simulated balance/hotel search, then rebooking buttons without repeating the urgent issue |
 | `corip_demo:confirm_438_16` or `Confirm $438.16` | `confirm_hotel_rebooking(amount=438.16)`, then immediately `get_saturday_candidates` | Hotel confirmation, then Scene 3 candidates and Select activities buttons in the same turn |
 | Research Saturday activities; start Scene 3 | `get_saturday_candidates` | Candidate message, then Select activities buttons |
-| `corip_demo:continue` or `Continue` | `sync_live_demo_postings(stage="initial")`, then `register_saturday_plan(selection="all")` | Real website sync, then working trace, registered plan, reservation status |
-| Two days later; check participants; continue Scene 5 | `sync_live_demo_postings(stage="two_days_later")`, then `get_participant_status` | Real website count sync, attention message, then shared-Uber final confirm/pay buttons |
+| `corip_demo:continue` or `Continue` | `register_saturday_plan(selection="all")` | Scripted registered plan and reservation status |
+| Two days later; check participants; continue Scene 5 | `get_participant_status` | Scripted attention message, then shared-Uber final confirm/pay buttons |
 | `corip_demo:confirm_uber_15_50` or `Confirm up to $15.50` | `confirm_shared_uber(amount=15.5)` | Human-approved Uber reservation/payment trace, confirmation, then outbound-call buttons |
 | `corip_demo:allow_calls` or `Allow Calls` | `run_live_operator_calls(decision="allow_calls")`, then `complete_operator_calls(decision="allow_calls")` | Two direct real calls, then call results and Kayak final confirm/pay buttons |
-| `corip_demo:confirm_72` or `Confirm $72.00` | `confirm_live_kayak_posting`, then `confirm_kayak_tour(amount=72)` | Human-approved real Corip confirmation and staged payment, then Balboa Park decision buttons |
-| `corip_demo:cancel_balboa` or `Cancel Activity` | `cancel_live_balboa_posting`, then `cancel_balboa_activity(decision="cancel_activity")` | Real website deletion, then cancellation trace and cancellation message |
+| `corip_demo:confirm_72` or `Confirm $72.00` | `confirm_kayak_tour(amount=72)` | Human-approved staged confirmation/payment, then Balboa Park decision buttons |
+| `corip_demo:cancel_balboa` or `Cancel Activity` | `cancel_balboa_activity(decision="cancel_activity")` | Scripted cancellation trace and message |
 | Final trip summary; Scene 6 | `get_final_trip_summary` | Exact Saturday section and completed-actions list |
 
 Use callback values instead of ambiguous labels whenever possible. The two `Open Setup Page` labels route according to the current scene; the Scene 2 `Allow Once` routes to the balance check, not the earlier Corip or Gmail choice.
@@ -50,35 +50,11 @@ For `Not Now`, `Cancel`, `Edit Selection`, `Deny`, `Edit Limits`, `Decline`, `Ke
 
 ## Final confirmation and payment rule
 
-Reaching the required participant count means `ready for final confirmation`, never automatic reservation or payment. Show a persistent human approval card containing the exact activity, date/time, participant count, price or maximum charge, cancellation terms when known, and a confirm-and-pay button. Do not call a booking/payment trace or the final Corip confirmation before that button. In this demo, Uber reaches 4/4 and uses `Confirm up to $15.50`; Kayak becomes eligible through the operator’s merged departure and uses `Confirm $72.00`; Balboa remains 2/6 and must not show a payment approval.
+Reaching the required participant count means `ready for final confirmation`, never automatic reservation or payment. Show a persistent human approval card containing the exact activity, date/time, participant count, price or maximum charge, cancellation terms when known, and a confirm-and-pay button. Do not show the scripted booking/payment trace before that button. In this demo, Uber reaches 4/4 and uses `Confirm up to $15.50`; Kayak becomes eligible through the operator’s merged departure and uses `Confirm $72.00`; Balboa remains 2/6 and must not show a payment approval.
 
-## Live Corip posting mutations
+## Corip is fully scripted
 
-Use only the following local `corip` wrapper tools. Each wrapper talks to the production Corip MCP and restricts deletion or replacement to records owned by the fixed `corip-telegram-demo-*` agent IDs. Keep displayed GET results scripted. Do not replace these wrappers with a sequence of direct `corip-live` calls.
-
-### After Continue
-
-After `Continue` and before `register_saturday_plan`, call `sync_live_demo_postings(stage="initial")`. It deletes/recreates only the three owned demo records and makes these exact production website states:
-
-- Kayak: `type=tour`, title `La Jolla Sea Caves Kayak Tour`, country `United States`, city `San Diego`, place `La Jolla Shores`, date `2026-07-25`, time `09:00`, `minPeople=4`, `maxPeople=4`, price `69`, owner `corip-telegram-demo-kayak-owner`.
-- Shared Uber: `type=taxi`, title `Shared Uber to La Jolla`, country `United States`, city `San Diego`, departure `Hilton San Diego Bayfront`, destination `La Jolla Shores`, date `2026-07-25`, time `07:45`, `minPeople=4`, `maxPeople=4`, price `15.5`, owner `corip-telegram-demo-uber-owner`.
-- Balboa: `type=leisure`, title `Balboa Park Food & Photo Walk`, description from the canonical script, country `United States`, city `San Diego`, place `Balboa Park Visitors Center`, date `2026-07-25`, time `14:30`, `minPeople=6`, `maxPeople=8`, price `45`, owner `corip-telegram-demo-balboa-owner`.
-
-- Kayak: 3/4. The owner is participant 1; the wrapper adds `kayak-member-1` and `corip-demo-user`.
-- Shared Uber: 4/4. The owner is participant 1; the wrapper adds `uber-member-1`, `uber-member-2`, and `corip-demo-user`.
-- Balboa: 1/6 from the automatically counted owner, with no extra join.
-
-### Two days later
-
-Before `get_participant_status`, call `sync_live_demo_postings(stage="two_days_later")`. This recreates only the owned Balboa record and adds `corip-demo-user` to the automatically counted owner, producing the scripted 2/6 website state without inflating reruns.
-
-### After actual calls
-
-After the kayak VocalBridge call succeeds, show the `Confirm $72.00` final confirmation/payment card but do not mutate the production posting yet. Only after that human button is selected, call `confirm_live_kayak_posting`; it locates the owned kayak record and performs the production vendor-confirm POST with source `vocal_bridge` and the merged-departure note.
-
-### Cancel Activity
-
-Before showing the cancellation result, call `cancel_live_balboa_posting`. It deletes only records owned by `corip-telegram-demo-balboa-owner`; no record found is a successful idempotent rerun.
+All Corip searches, participant counts, joins, creates, confirmations, cancellations, publishing, and website changes are script fixtures. Do not connect to `https://corip-postings-kimmc3423.fly.dev/mcp` after the initial staged setup message, and do not retry a missing Corip tool. The fixed scene tools already contain every result needed for the performance.
 
 ## Live VocalBridge calls
 
@@ -105,4 +81,4 @@ Never omit `message`; Telegram rejects presentation-only sends. Record the retur
 
 ## Demo truth boundary
 
-HTTP setup, Skills, Cron, Memory, Calendar, PayPal, Sabre, Viator, Gmail, OAuth, reservation, payment, and notification results are staged fixtures. Corip production posting mutations and VocalBridge negotiation calls are real. Never broaden live effects beyond those two MCPs. If asked whether an action was real, describe this boundary honestly.
+HTTP setup, Corip, Skills, Cron, Memory, Calendar, PayPal, Sabre, Viator, Gmail, OAuth, reservation, payment, and notification results are staged fixtures. Only VocalBridge negotiation calls are real. Never broaden live effects beyond VocalBridge. If asked whether an action was real, describe this boundary honestly.

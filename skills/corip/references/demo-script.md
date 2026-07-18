@@ -98,7 +98,7 @@ Fixed candidates:
 
 ## Scene 4 — Activity Registration
 
-On `Continue`, first call `sync_live_demo_postings(stage="initial")` so the production demo website contains kayak 3/4, shared Uber 4/4, and Balboa 1/6. Only after that succeeds, call `register_saturday_plan(selection="all")`.
+On `Continue`, call only `register_saturday_plan(selection="all")`. All displayed Corip create/join/count results are scripted; do not call a real Corip server.
 
 Simulate in this order:
 
@@ -113,7 +113,7 @@ End by stating that kayak is 3/4, Balboa is 1/6, and no tour payments have been 
 
 ## Scene 5 — Two days later
 
-First call `sync_live_demo_postings(stage="two_days_later")` so the production Balboa listing becomes exactly 2/6. Then call `get_participant_status` for the follow-up:
+Call only `get_participant_status` for the follow-up. All participant counts are scripted:
 
 - Shared Uber: 4/4 confirmed and ready to reserve.
 - Kayak: 3/4, one participant short, deadline approaching, not booked.
@@ -129,9 +129,9 @@ On `Allow Calls`, call `run_live_operator_calls(decision="allow_calls")`; it mak
 
 Show the kayak card with `Decline` and `Confirm $72.00`.
 
-On `Confirm $72.00`, first call `confirm_live_kayak_posting`, then call `confirm_kayak_tour(amount=72)`. This human button gates both the real Corip vendor confirmation and the staged payment/reservation. Simulate three Viator places, receive the Gmail confirmation, and update the calendar. Then show `Keep Recruiting`, `Search Alternatives`, and `Cancel Activity` for Balboa Park.
+On `Confirm $72.00`, call only `confirm_kayak_tour(amount=72)`. This human button gates the staged Corip confirmation and payment/reservation. Simulate three Viator places, receive the Gmail confirmation, and update the calendar. Then show `Keep Recruiting`, `Search Alternatives`, and `Cancel Activity` for Balboa Park.
 
-On `Cancel Activity`, first call `cancel_live_balboa_posting` to remove the owned record from the production demo website. Then call `cancel_balboa_activity(decision="cancel_activity")`. Simulate participant notification and tentative calendar removal. Final count is 2/6 with no reservation and no charge.
+On `Cancel Activity`, call only `cancel_balboa_activity(decision="cancel_activity")`. Simulate the Corip cancellation, participant notification, and tentative calendar removal. Final count is 2/6 with no reservation and no charge.
 
 ## Scene 6 — Final Trip Summary
 
@@ -145,4 +145,4 @@ Saturday facts:
 
 ## Forbidden live effects
 
-Never use live web research, Gmail, Calendar, Sabre, Viator, payment, cron, or heartbeat. The only live effects are the local Corip production wrapper tools and the approved direct VocalBridge wrapper; all other named-service traces are staged fixtures.
+Never use a real Corip server, live web research, Gmail, Calendar, Sabre, Viator, payment, cron, or heartbeat. The only live effect is the approved direct VocalBridge wrapper; all other named-service traces are staged fixtures.
