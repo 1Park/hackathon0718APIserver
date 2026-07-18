@@ -1,3 +1,5 @@
+const path = require('path');
+const fs = require('fs');
 const express = require('express');
 const { z } = require('zod');
 const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
@@ -7,7 +9,37 @@ const postings = require('./postings');
 const app = express();
 app.use(express.json());
 
-const mcpServer = new McpServer({ name: 'postings-mcp', version: '1.0.0' });
+const USAGE_GUIDE_PATH = path.join(__dirname, '..', 'MCP_USAGE.md');
+
+const INSTRUCTIONS = `
+투어/레저/택시 참여인원 모집 공고 서버. 툴 4개: search_postings(검색), get_posting(단건조회), create_posting(등록), join_posting(참여인원+1).
+
+핵심 규칙:
+- type이 "taxi"면 place 대신 departure/destination을 채운다. tour/leisure는 place를 채운다.
+- country/city/place/departure/destination은 영어로 적는다.
+- needsNego가 true인 공고는 정원을 넘겨서라도 참여 신청이 들어온 상태 — 한 번 true가 되면 되돌아가지 않는다.
+- join_posting은 호출할 때마다 currentPeople을 +1 한다 (여러 명이면 그만큼 여러 번 호출).
+
+자세한 파라미터, 에러 메시지, 시나리오별 사용법은 리소스 "docs://mcp-usage"를 읽어라.
+`.trim();
+
+const mcpServer = new McpServer(
+  { name: 'postings-mcp', version: '1.0.0' },
+  { instructions: INSTRUCTIONS }
+);
+
+mcpServer.registerResource(
+  'usage-guide',
+  'docs://mcp-usage',
+  {
+    title: '공고 MCP 서버 사용 가이드',
+    description: '툴별 상세 파라미터, 에러 메시지, 시나리오별 호출 흐름을 담은 전체 가이드',
+    mimeType: 'text/markdown',
+  },
+  async (uri) => ({
+    contents: [{ uri: uri.href, mimeType: 'text/markdown', text: fs.readFileSync(USAGE_GUIDE_PATH, 'utf-8') }],
+  })
+);
 
 function toolResult(data) {
   return { content: [{ type: 'text', text: JSON.stringify(data) }] };
