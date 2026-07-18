@@ -27,7 +27,7 @@ db.exec(`
   )
 `);
 
-// 이전 스키마(place NOT NULL, departure/destination 없음)로 이미 생성된 DB를 위한 마이그레이션
+// Migrate databases created with the previous schema (place NOT NULL and no departure/destination).
 const existingColumns = db.prepare('PRAGMA table_info(postings)').all().map((c) => c.name);
 if (!existingColumns.includes('departure')) {
   db.exec(`

@@ -32,29 +32,29 @@ const REQUIRED_FIELDS = [
 function validateCreateInput(body) {
   for (const field of REQUIRED_FIELDS) {
     if (body[field] === undefined || body[field] === null || body[field] === '') {
-      return `필수 필드 누락: ${field}`;
+      return `Missing required field: ${field}`;
     }
   }
   if (!VALID_TYPES.includes(body.type)) {
-    return `type은 ${VALID_TYPES.join(', ')} 중 하나여야 합니다`;
+    return `type must be one of: ${VALID_TYPES.join(', ')}`;
   }
   if (body.type === 'taxi') {
-    if (!body.departure) return '필수 필드 누락: departure';
-    if (!body.destination) return '필수 필드 누락: destination';
+    if (!body.departure) return 'Missing required field: departure';
+    if (!body.destination) return 'Missing required field: destination';
   } else if (!body.place) {
-    return '필수 필드 누락: place';
+    return 'Missing required field: place';
   }
   if (!Number.isInteger(body.minPeople) || !Number.isInteger(body.maxPeople)) {
-    return 'minPeople, maxPeople는 정수여야 합니다';
+    return 'minPeople and maxPeople must be integers';
   }
   if (body.minPeople < 0 || body.maxPeople < 0) {
-    return 'minPeople, maxPeople는 0 이상이어야 합니다';
+    return 'minPeople and maxPeople must be zero or greater';
   }
   if (body.minPeople > body.maxPeople) {
-    return 'minPeople는 maxPeople보다 클 수 없습니다';
+    return 'minPeople cannot be greater than maxPeople';
   }
   if (typeof body.price !== 'number') {
-    return 'price는 숫자여야 합니다';
+    return 'price must be a number';
   }
   return null;
 }

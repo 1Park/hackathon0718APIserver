@@ -15,19 +15,18 @@ const CORIP_SKILL_URI = 'skill://corip/SKILL.md';
 const LEGACY_CORIP_SKILL_URI = 'docs://corip-skill';
 
 const INSTRUCTIONS = `
-Corip은 투어·레저·택시를 함께할 여행자를 연결하는 공고 서버다. 툴 5개: search_postings(검색), get_posting(단건조회), create_posting(등록), join_posting(참여인원+1), delete_posting(삭제).
+Corip connects travelers through tour, leisure, and shared-taxi postings. It exposes five tools: search_postings, get_posting, create_posting, join_posting, and delete_posting.
 
-핵심 규칙:
-- 사용자가 투어·레저·택시를 계획하거나 동행자를 찾으면 새 공고를 만들기 전에 search_postings로 기존 공고부터 검색한다.
-- 적합한 공고가 있으면 get_posting으로 최신 상태를 확인한다. 필요한 정보와 사용자 제약이 모두 확보되었고 정원 내라면 재확인 없이 join_posting을 호출한다.
-- 적합한 공고가 없으면 필요한 값을 수집하거나 추론한다. create_posting의 필수값이 모두 확보되는 즉시 재확인 없이 바로 등록한다.
-- type이 "taxi"면 place 대신 departure/destination을 채운다. tour/leisure는 place를 채운다.
-- country/city/place/departure/destination은 영어로 적는다.
-- needsNego가 true인 공고는 정원을 넘겨서라도 참여 신청이 들어온 상태 — 한 번 true가 되면 되돌아가지 않는다.
-- join_posting은 호출할 때마다 currentPeople을 +1 한다 (여러 명이면 그만큼 여러 번 호출).
-- delete_posting은 그 공고를 올린 agentId로만 삭제 가능하다 (다른 agentId면 거부됨).
+Core rules:
+- Search existing postings before creating a new one.
+- Refresh a selected posting with get_posting before relying on its participant count.
+- Use place for tour and leisure postings. Use departure and destination for taxi postings.
+- Write country, city, place, departure, and destination in English.
+- Each join_posting call adds exactly one participant. When capacity is exceeded, needsNego becomes true and remains true.
+- Only the matching owner agentId can delete a posting.
+- For travel-planning requests, use the private normalized trip and interest summaries described by the Corip skill before calling external services.
 
-셋업 및 행동 원칙은 리소스 "skill://corip/SKILL.md", 상세 파라미터와 에러 처리는 "docs://mcp-usage"를 읽어라.
+Read "skill://corip/SKILL.md" for setup, cron, travel-planning, privacy, and operating rules. Read "docs://mcp-usage" for detailed schemas, examples, and error handling.
 `.trim();
 
 const mcpServer = new McpServer(
@@ -39,8 +38,8 @@ mcpServer.registerResource(
   'usage-guide',
   'docs://mcp-usage',
   {
-    title: '공고 MCP 서버 사용 가이드',
-    description: '툴별 상세 파라미터, 에러 메시지, 시나리오별 호출 흐름을 담은 전체 가이드',
+    title: 'Corip Postings MCP Usage Guide',
+    description: 'Complete tool parameters, error messages, and scenario-based invocation flows',
     mimeType: 'text/markdown',
   },
   async (uri) => ({
@@ -53,7 +52,7 @@ mcpServer.registerResource(
   CORIP_SKILL_URI,
   {
     title: 'Corip OpenClaw Skill',
-    description: 'OpenClaw용 Corip 셋업 및 운영 워크플로를 정의한 배포용 SKILL.md',
+    description: 'Distributable SKILL.md for the Corip setup and operating workflow in OpenClaw',
     mimeType: 'text/markdown',
   },
   async (uri) => ({
@@ -61,13 +60,13 @@ mcpServer.registerResource(
   })
 );
 
-// 기존 클라이언트가 사용하던 URI를 동일한 Skill 원문으로 계속 지원한다.
+// Keep the legacy URI available with the exact same Skill content.
 mcpServer.registerResource(
   'corip-skill-legacy',
   LEGACY_CORIP_SKILL_URI,
   {
     title: 'Corip OpenClaw Skill (legacy URI)',
-    description: `호환용 별칭. 새 클라이언트는 ${CORIP_SKILL_URI}를 사용한다`,
+    description: `Compatibility alias. New clients should use ${CORIP_SKILL_URI}`,
     mimeType: 'text/markdown',
   },
   async (uri) => ({
@@ -86,7 +85,7 @@ function toolError(message) {
 mcpServer.registerTool(
   'create_posting',
   {
-    description: '투어/레저/택시 참여인원 모집 공고를 등록한다. type이 taxi면 place 대신 departure/destination을 채운다',
+    description: 'Create a participant posting for a tour, leisure activity, or shared taxi. For taxi postings, use departure and destination instead of place.',
     inputSchema: {
       type: z.enum(postings.VALID_TYPES),
       country: z.string(),
@@ -112,12 +111,12 @@ mcpServer.registerTool(
 mcpServer.registerTool(
   'get_posting',
   {
-    description: '특정 id의 공고를 조회한다',
+    description: 'Get a posting by id.',
     inputSchema: { id: z.union([z.string(), z.number()]) },
   },
   async ({ id }) => {
     const posting = postings.getById(id);
-    if (!posting) return toolError('공고를 찾을 수 없습니다');
+    if (!posting) return toolError('Posting not found');
     return toolResult(posting);
   }
 );
@@ -125,7 +124,7 @@ mcpServer.registerTool(
 mcpServer.registerTool(
   'search_postings',
   {
-    description: '키워드/조건으로 여러 공고를 검색한다',
+    description: 'Search postings by keyword or structured filters.',
     inputSchema: {
       q: z.string().optional(),
       type: z.enum(postings.VALID_TYPES).optional(),
@@ -140,12 +139,12 @@ mcpServer.registerTool(
 mcpServer.registerTool(
   'join_posting',
   {
-    description: '특정 공고에 참여인원을 1명 늘린다 (최대인원 초과 시 네고여부가 true로 바뀜)',
+    description: 'Add one participant to a posting. If capacity is exceeded, needsNego becomes true.',
     inputSchema: { id: z.union([z.string(), z.number()]) },
   },
   async ({ id }) => {
     const updated = postings.join(id);
-    if (!updated) return toolError('공고를 찾을 수 없습니다');
+    if (!updated) return toolError('Posting not found');
     return toolResult(updated);
   }
 );
@@ -153,13 +152,13 @@ mcpServer.registerTool(
 mcpServer.registerTool(
   'delete_posting',
   {
-    description: '자신이 올린 공고를 삭제한다. 공고를 올린 agentId와 일치해야만 삭제된다',
+    description: 'Delete an owned posting. The supplied agentId must match the posting owner.',
     inputSchema: { id: z.union([z.string(), z.number()]), agentId: z.string() },
   },
   async ({ id, agentId }) => {
     const result = postings.remove(id, agentId);
-    if (result === 'not_found') return toolError('공고를 찾을 수 없습니다');
-    if (result === 'forbidden') return toolError('본인이 올린 공고만 삭제할 수 있습니다');
+    if (result === 'not_found') return toolError('Posting not found');
+    if (result === 'forbidden') return toolError('Only the posting owner can delete this posting');
     return toolResult({ id, deleted: true });
   }
 );
@@ -171,7 +170,7 @@ app.post('/mcp', async (req, res) => {
   await transport.handleRequest(req, res, req.body);
 });
 
-// 공고 올리는 API
+// Create a posting.
 app.post('/postings', (req, res) => {
   const error = postings.validateCreateInput(req.body);
   if (error) {
@@ -181,57 +180,57 @@ app.post('/postings', (req, res) => {
   res.status(201).json(created);
 });
 
-// 검색해서 여러 공고를 받아오는 API
+// Search postings.
 app.get('/postings/search', (req, res) => {
   const { q, type, country, city, date } = req.query;
   const results = postings.search({ q, type, country, city, date });
   res.json(results);
 });
 
-// 특정 공고를 받아오는 API
+// Get one posting.
 app.get('/postings/:id', (req, res) => {
   const posting = postings.getById(req.params.id);
   if (!posting) {
-    return res.status(404).json({ error: '공고를 찾을 수 없습니다' });
+    return res.status(404).json({ error: 'Posting not found' });
   }
   res.json(posting);
 });
 
-// 참여인원 +1 API
+// Add one participant.
 app.post('/postings/:id/join', (req, res) => {
   const updated = postings.join(req.params.id);
   if (!updated) {
-    return res.status(404).json({ error: '공고를 찾을 수 없습니다' });
+    return res.status(404).json({ error: 'Posting not found' });
   }
   res.json(updated);
 });
 
-// 자신이 올린 공고를 삭제하는 API (agentId 일치해야 삭제됨)
+// Delete an owned posting. The agentId must match.
 app.delete('/postings/:id', (req, res) => {
   const { agentId } = req.query;
   if (!agentId) {
-    return res.status(400).json({ error: '쿼리 파라미터 agentId가 필요합니다' });
+    return res.status(400).json({ error: 'The agentId query parameter is required' });
   }
   const result = postings.remove(req.params.id, agentId);
   if (result === 'not_found') {
-    return res.status(404).json({ error: '공고를 찾을 수 없습니다' });
+    return res.status(404).json({ error: 'Posting not found' });
   }
   if (result === 'forbidden') {
-    return res.status(403).json({ error: '본인이 올린 공고만 삭제할 수 있습니다' });
+    return res.status(403).json({ error: 'Only the posting owner can delete this posting' });
   }
   res.status(204).end();
 });
 
-// JSON 파싱 실패 등 잘못된 요청을 스택트레이스 대신 깔끔한 400으로 응답
+// Return a clean 400 response for malformed JSON instead of a stack trace.
 app.use((err, req, res, next) => {
   if (err.type === 'entity.parse.failed') {
-    return res.status(400).json({ error: '요청 body가 올바른 JSON 형식이 아닙니다' });
+    return res.status(400).json({ error: 'The request body is not valid JSON' });
   }
   console.error(err);
-  res.status(500).json({ error: '서버 내부 오류' });
+  res.status(500).json({ error: 'Internal server error' });
 });
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`API 서버 실행 중: http://localhost:${PORT}`);
+  console.log(`API server listening at http://localhost:${PORT}`);
 });

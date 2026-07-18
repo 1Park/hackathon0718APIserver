@@ -1,7 +1,7 @@
 {
   "name": "a2apractice",
   "version": "1.0.0",
-  "description": "투어/레저/택시 참여인원 모집 공고 API 서버",
+  "description": "API server for tour, leisure, and shared-taxi participant postings",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js"
