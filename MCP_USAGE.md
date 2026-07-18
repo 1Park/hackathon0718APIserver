@@ -21,6 +21,7 @@ Tools:
 - `get_saturday_candidates`
 - `register_saturday_plan`
 - `get_participant_status`
+- `confirm_shared_uber` — final human confirmation/payment step after the group reaches 4/4
 - `complete_operator_calls`
 - `confirm_kayak_tour`
 - `cancel_balboa_activity`

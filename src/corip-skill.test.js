@@ -8,7 +8,7 @@ const skill = fs.readFileSync(path.join(__dirname, '..', 'skills', 'corip', 'SKI
 const agents = fs.readFileSync(path.join(__dirname, '..', 'AGENTS.md'), 'utf8');
 const server = fs.readFileSync(path.join(__dirname, 'index.js'), 'utf8');
 
-test('demo MCP exposes fifteen scene tools and four live wrappers', () => {
+test('demo MCP exposes sixteen scene tools and four live wrappers', () => {
   const expected = [
     'sync_live_demo_postings',
     'confirm_live_kayak_posting',
@@ -25,6 +25,7 @@ test('demo MCP exposes fifteen scene tools and four live wrappers', () => {
     'get_saturday_candidates',
     'register_saturday_plan',
     'get_participant_status',
+    'confirm_shared_uber',
     'complete_operator_calls',
     'confirm_kayak_tour',
     'cancel_balboa_activity',
@@ -51,6 +52,7 @@ test('scene facts match the replacement script', () => {
     '3 / 4',
     '2 / 6',
     '$72.00',
+    '$15.50',
     '9:30 AM',
     '1 minute 48 seconds',
     '2 minutes 6 seconds',
@@ -65,7 +67,8 @@ test('approval transitions and button labels are exact', () => {
   assert.deepEqual(demo.SCENES.reviewTrip.approval.buttons.map((b) => b.label), ['Deny', 'Allow Once']);
   assert.deepEqual(demo.SCENES.findHotel.approval.buttons.map((b) => b.label), ['Not Now', 'Review Alternatives', 'Confirm $438.16']);
   assert.deepEqual(demo.SCENES.saturdayCandidates.approval.buttons.map((b) => b.label), ['Cancel', 'Edit Selection', 'Continue']);
-  assert.deepEqual(demo.SCENES.participantStatus.approval.buttons.map((b) => b.label), ['Deny', 'Edit Limits', 'Allow Calls']);
+  assert.deepEqual(demo.SCENES.participantStatus.approval.buttons.map((b) => b.label), ['Not Now', 'Confirm up to $15.50']);
+  assert.deepEqual(demo.SCENES.confirmUber.approval.buttons.map((b) => b.label), ['Deny', 'Edit Limits', 'Allow Calls']);
   assert.deepEqual(demo.SCENES.operatorCalls.approval.buttons.map((b) => b.label), ['Decline', 'Confirm $72.00']);
   assert.deepEqual(demo.SCENES.confirmKayak.approval.buttons.map((b) => b.label), ['Keep Recruiting', 'Search Alternatives', 'Cancel Activity']);
   assert.equal(demo.SCENES.confirmHotel.continueImmediately.tool, 'get_saturday_candidates');
@@ -95,6 +98,7 @@ test('skill and standing order restrict live effects and enforce buttons', () =>
     assert.match(source, /vocalbridge/i);
     assert.match(source, /Never (?:use|broaden)|remain staged/i);
     assert.match(source, /Confirm \$72\.00/);
+    assert.match(source, /Confirm up to \$15\.50/);
     assert.match(source, /Confirm \$438\.16/);
     assert.match(source, /Cancel Activity/);
     assert.match(source, /messageId/);
@@ -112,6 +116,9 @@ test('hybrid demo declares the real Corip POST and VocalBridge contracts', () =>
   assert.match(skill, /confirm_live_kayak_posting/);
   assert.match(skill, /cancel_live_balboa_posting/);
   assert.match(skill, /run_live_operator_calls\(decision="allow_calls"\)/);
+  assert.match(skill, /confirm_shared_uber\(amount=15\.5\)/);
+  assert.match(skill, /Confirm \$72\.00[\s\S]*confirm_live_kayak_posting/);
+  assert.match(skill, /Reaching the required participant count[\s\S]*never automatic reservation or payment/);
   for (const field of [
     'country',
     'city',

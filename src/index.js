@@ -100,7 +100,7 @@ mcpServer.registerTool(
 mcpServer.registerTool(
   'confirm_live_kayak_posting',
   {
-    description: 'After a successful approved VocalBridge kayak call, perform the real production vendor-confirm POST for the owned kayak demo posting.',
+    description: 'Only after the human selects Confirm $72.00 following a successful VocalBridge call, perform the real production vendor-confirm POST for the owned kayak demo posting.',
     inputSchema: {},
   },
   async () => liveResult(await liveCorip.confirmKayak())
@@ -217,10 +217,19 @@ mcpServer.registerTool(
 mcpServer.registerTool(
   'get_participant_status',
   {
-    description: 'Scene 5.1: two days later, return fixed participant counts and the outbound-call approval card.',
+    description: 'Scene 5.1: two days later, return fixed participant counts and the final shared-Uber confirmation/payment card because its group reached 4/4.',
     inputSchema: {},
   },
   async () => result(demo.SCENES.participantStatus)
+);
+
+mcpServer.registerTool(
+  'confirm_shared_uber',
+  {
+    description: 'After Confirm up to $15.50, simulate the final human-approved shared-Uber reservation and payment authorization, then return the outbound-call approval card.',
+    inputSchema: { amount: z.literal(15.5) },
+  },
+  async () => result(demo.SCENES.confirmUber)
 );
 
 mcpServer.registerTool(

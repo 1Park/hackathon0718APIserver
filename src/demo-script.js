@@ -523,6 +523,41 @@ The agent can:
 * Find a smaller-group alternative
 * Ask the operator whether two participants may join another scheduled tour`,
     approval: {
+      title: 'Confirm shared Uber',
+      body: `Shared Uber to La Jolla
+July 25 at **7:45 AM**
+Hilton San Diego Bayfront → La Jolla Shores
+
+The group is full: **4 / 4 participants**
+
+Current estimated share: **$13.50–15.50**
+Maximum authorized charge: **$15.50**
+
+No charge will be made unless you confirm.`,
+      buttons: [
+        { label: 'Not Now', value: 'corip_demo:not_now_uber' },
+        { label: 'Confirm up to $15.50', value: 'corip_demo:confirm_uber_15_50', style: 'success' },
+      ],
+      next: { 'corip_demo:confirm_uber_15_50': 'confirm_shared_uber' },
+    },
+  },
+
+  confirmUber: {
+    scene: '5.2-uber-confirmed',
+    simulatedToolTrace: [
+      { tool: 'Uber.createReservation', input: { vehicle: 'Uber XL', route: 'Hilton San Diego Bayfront → La Jolla Shores', departureTime: 'July 25, 7:45 AM', maximumShare: 15.5 }, result: 'The shared ride was reserved successfully.' },
+      { tool: 'PayPal.authorizePayment', input: { maximumAmount: 15.5 }, result: 'Payment authorization completed. Final share will not exceed $15.50.' },
+      { tool: 'Calendar.updateEvent', result: 'The shared Uber event was marked Confirmed.' },
+    ],
+    persistentMessage: `✅ **Shared Uber confirmed**
+
+The four-person group is complete and the ride has been reserved.
+
+* July 25 at 7:45 AM
+* Hilton San Diego Bayfront → La Jolla Shores
+* Four participants
+* Your final share will not exceed **$15.50**`,
+    approval: {
       title: 'Allow outbound calls?',
       body: `The agent will make up to two calls.
 

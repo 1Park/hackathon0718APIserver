@@ -119,9 +119,9 @@ First call `sync_live_demo_postings(stage="two_days_later")` so the production B
 - Kayak: 3/4, one participant short, deadline approaching, not booked.
 - Balboa Park: 2/6, four short, deadline approaching, unlikely to reach minimum.
 
-Show the outbound-call card. It permits at most two simulated calls, three minutes each, with AI disclosure and no payment. Kayak ceiling is $85 with a morning departure; Balboa ceiling is $55 with an afternoon departure.
+Because the shared Uber reached 4/4, first show a final human confirmation/payment card with `Not Now` and `Confirm up to $15.50`. Reaching capacity does not authorize automatic reservation or payment. On confirmation, call `confirm_shared_uber(amount=15.5)`, simulate the ride reservation and a payment authorization capped at $15.50, and then show the outbound-call card. That card permits at most two real calls, three minutes each, with AI disclosure and no payment. Kayak ceiling is $85 with a morning departure; Balboa ceiling is $55 with an afternoon departure.
 
-On `Allow Calls`, call `run_live_operator_calls(decision="allow_calls")`; it makes the two real calls directly to the fixed VocalBridge MCP URL with the seven fields specified in `SKILL.md`. After it succeeds, call `confirm_live_kayak_posting`. Then call `complete_operator_calls(decision="allow_calls")`.
+On `Allow Calls`, call `run_live_operator_calls(decision="allow_calls")`; it makes the two real calls directly to the fixed VocalBridge MCP URL with the seven fields specified in `SKILL.md`. Then call `complete_operator_calls(decision="allow_calls")`. Do not confirm the live Kayak posting yet.
 
 - Simulated kayak call duration: 1:48. Result: three-person group can join a public July 25 9:30 AM departure for $72 each, free cancellation through 24 hours prior, reserve by 6:00 PM today.
 - Simulated Balboa call duration: 2:06. Result: only a 4:30 PM different-route, nonrefundable tour for $64. Reject it because it exceeds $55.
@@ -129,7 +129,7 @@ On `Allow Calls`, call `run_live_operator_calls(decision="allow_calls")`; it mak
 
 Show the kayak card with `Decline` and `Confirm $72.00`.
 
-On `Confirm $72.00`, call `confirm_kayak_tour(amount=72)`. Simulate three Viator places, update Corip to confirmed/closed at 9:30 AM, receive the Gmail confirmation, and update the calendar. Then show `Keep Recruiting`, `Search Alternatives`, and `Cancel Activity` for Balboa Park.
+On `Confirm $72.00`, first call `confirm_live_kayak_posting`, then call `confirm_kayak_tour(amount=72)`. This human button gates both the real Corip vendor confirmation and the staged payment/reservation. Simulate three Viator places, receive the Gmail confirmation, and update the calendar. Then show `Keep Recruiting`, `Search Alternatives`, and `Cancel Activity` for Balboa Park.
 
 On `Cancel Activity`, first call `cancel_live_balboa_posting` to remove the owned record from the production demo website. Then call `cancel_balboa_activity(decision="cancel_activity")`. Simulate participant notification and tentative calendar removal. Final count is 2/6 with no reservation and no charge.
 

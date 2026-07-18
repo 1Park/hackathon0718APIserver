@@ -37,15 +37,20 @@ Use this exact state transition table:
 | `corip_demo:confirm_438_16` or `Confirm $438.16` | `confirm_hotel_rebooking(amount=438.16)`, then immediately `get_saturday_candidates` | Hotel confirmation, then Scene 3 candidates and Select activities buttons in the same turn |
 | Research Saturday activities; start Scene 3 | `get_saturday_candidates` | Candidate message, then Select activities buttons |
 | `corip_demo:continue` or `Continue` | `sync_live_demo_postings(stage="initial")`, then `register_saturday_plan(selection="all")` | Real website sync, then working trace, registered plan, reservation status |
-| Two days later; check participants; continue Scene 5 | `sync_live_demo_postings(stage="two_days_later")`, then `get_participant_status` | Real website count sync, then status trace, attention message, Allow outbound calls buttons |
-| `corip_demo:allow_calls` or `Allow Calls` | `run_live_operator_calls(decision="allow_calls")`, `confirm_live_kayak_posting`, then `complete_operator_calls(decision="allow_calls")` | Two direct real calls/vendor confirmation, then call results and Confirm kayak tour buttons |
-| `corip_demo:confirm_72` or `Confirm $72.00` | `confirm_kayak_tour(amount=72)` | Reservation trace, kayak confirmation, Balboa Park decision buttons |
+| Two days later; check participants; continue Scene 5 | `sync_live_demo_postings(stage="two_days_later")`, then `get_participant_status` | Real website count sync, attention message, then shared-Uber final confirm/pay buttons |
+| `corip_demo:confirm_uber_15_50` or `Confirm up to $15.50` | `confirm_shared_uber(amount=15.5)` | Human-approved Uber reservation/payment trace, confirmation, then outbound-call buttons |
+| `corip_demo:allow_calls` or `Allow Calls` | `run_live_operator_calls(decision="allow_calls")`, then `complete_operator_calls(decision="allow_calls")` | Two direct real calls, then call results and Kayak final confirm/pay buttons |
+| `corip_demo:confirm_72` or `Confirm $72.00` | `confirm_live_kayak_posting`, then `confirm_kayak_tour(amount=72)` | Human-approved real Corip confirmation and staged payment, then Balboa Park decision buttons |
 | `corip_demo:cancel_balboa` or `Cancel Activity` | `cancel_live_balboa_posting`, then `cancel_balboa_activity(decision="cancel_activity")` | Real website deletion, then cancellation trace and cancellation message |
 | Final trip summary; Scene 6 | `get_final_trip_summary` | Exact Saturday section and completed-actions list |
 
 Use callback values instead of ambiguous labels whenever possible. The two `Open Setup Page` labels route according to the current scene; the Scene 2 `Allow Once` routes to the balance check, not the earlier Corip or Gmail choice.
 
 For `Not Now`, `Cancel`, `Edit Selection`, `Deny`, `Edit Limits`, `Decline`, `Keep Recruiting`, `Search Alternatives`, or any unimplemented alternate branch, acknowledge the selection briefly and stop. Do not invent a branch.
+
+## Final confirmation and payment rule
+
+Reaching the required participant count means `ready for final confirmation`, never automatic reservation or payment. Show a persistent human approval card containing the exact activity, date/time, participant count, price or maximum charge, cancellation terms when known, and a confirm-and-pay button. Do not call a booking/payment trace or the final Corip confirmation before that button. In this demo, Uber reaches 4/4 and uses `Confirm up to $15.50`; Kayak becomes eligible through the operator’s merged departure and uses `Confirm $72.00`; Balboa remains 2/6 and must not show a payment approval.
 
 ## Live Corip posting mutations
 
@@ -69,7 +74,7 @@ Before `get_participant_status`, call `sync_live_demo_postings(stage="two_days_l
 
 ### After actual calls
 
-After the kayak VocalBridge call succeeds, call `confirm_live_kayak_posting`. It locates the owned kayak record and performs the production vendor-confirm POST with source `vocal_bridge` and the merged-departure note.
+After the kayak VocalBridge call succeeds, show the `Confirm $72.00` final confirmation/payment card but do not mutate the production posting yet. Only after that human button is selected, call `confirm_live_kayak_posting`; it locates the owned kayak record and performs the production vendor-confirm POST with source `vocal_bridge` and the merged-departure note.
 
 ### Cancel Activity
 
