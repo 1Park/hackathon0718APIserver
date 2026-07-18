@@ -54,3 +54,24 @@ test('Corip posting monitor uses a one-minute cron schedule', () => {
   );
   assert.doesNotMatch(skill, /for normal use, prefer a less frequent interval/i);
 });
+
+test('Saturday trip planning requires all marketplaces, schedule persistence, and a Corip post', () => {
+  for (const source of [skill, usageGuide, serverSource]) {
+    assert.match(source, /Viator/i);
+    assert.match(source, /GetYourGuide/i);
+    assert.match(source, /MyRealTrip/i);
+    assert.match(source, /corip-schedule/i);
+    assert.match(source, /create_posting/i);
+  }
+  assert.match(skill, /Do not stop at “no Corip match”/i);
+  assert.match(skill, /call `join_posting` once to count that creator/i);
+  assert.match(skill, /verify the new posting with `get_posting`/i);
+  assert.match(skill, /minPeople: 2.*maxPeople: 4/is);
+  assert.match(skill, /first tool action must load and follow `skills\/corip\/SKILL\.md`/i);
+  assert.match(skill, /do not reply until you have separately searched Viator, GetYourGuide, and MyRealTrip/i);
+  assert.match(skill, /`No compatible Corip activity` is not completion evidence/i);
+  assert.match(skill, /site:viator\.com.*site:getyourguide\.com.*site:myrealtrip\.com/is);
+  assert.match(skill, /Open one resulting marketplace URL per site with `web_fetch`/i);
+  assert.match(skill, /repeating one generic query three times does not satisfy/i);
+  assert.match(skill, /remove or replace every stale entry with the same posting id or `linkedScheduleMarker`/i);
+});

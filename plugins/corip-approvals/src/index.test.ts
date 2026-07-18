@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { approvalForTool, EMAIL_SYNC_APPROVAL_TOOL } from "./index.js";
+import { describe, expect, it, vi } from "vitest";
+import plugin, { approvalForTool, EMAIL_SYNC_APPROVAL_TOOL } from "./index.js";
 
 describe("corip approval policy", () => {
   it("requests one native Allow/Deny decision for email synchronization", () => {
@@ -33,5 +33,47 @@ describe("corip approval policy", () => {
       },
     });
     expect(request?.description.length).toBeLessThanOrEqual(256);
+  });
+
+  it("requests approval inside only the Corip tool without a global tool hook", async () => {
+    let toolFactory: ((ctx: Record<string, unknown>) => any) | undefined;
+    const gatewayRequest = vi.fn().mockResolvedValue({ decision: "allow-once" });
+    const on = vi.fn();
+    plugin.register?.({
+      registerTool(factory: unknown) {
+        toolFactory = factory as (ctx: Record<string, unknown>) => any;
+      },
+      on,
+      runtime: {
+        gateway: {
+          isAvailable: async () => true,
+          request: gatewayRequest,
+        },
+      },
+    } as never);
+
+    expect(on).not.toHaveBeenCalled();
+    const tool = toolFactory?.({
+      agentId: "main",
+      sessionKey: "agent:main:telegram:direct:test",
+      deliveryContext: { channel: "telegram", to: "test" },
+    });
+    const result = await tool.execute("call-1", {
+      connector: "Gmail",
+      schedule: "*/30 * * * *",
+      timezone: "Asia/Seoul",
+    });
+
+    expect(gatewayRequest).toHaveBeenCalledWith(
+      "plugin.approval.request",
+      expect.objectContaining({
+        toolName: EMAIL_SYNC_APPROVAL_TOOL,
+        sessionKey: "agent:main:telegram:direct:test",
+        turnSourceChannel: "telegram",
+        turnSourceTo: "test",
+      }),
+      expect.any(Object),
+    );
+    expect(result.details).toMatchObject({ approved: true });
   });
 });
