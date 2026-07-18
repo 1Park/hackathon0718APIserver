@@ -19,6 +19,11 @@ test('Corip setup includes the privacy-gated email synchronization cron', () => 
   assert.match(skill, /Stop and wait inside the approval tool call/);
   assert.match(skill, /do not mutate the job until a successful `corip_approve_email_sync` result/);
   assert.match(skill, /Never silently use `disabled` as the outcome of a denied, timed-out, or unavailable approval card/);
+  assert.match(skill, /Treat chat text such as `Approve email`.*as a request to open the native card/is);
+  assert.match(skill, /setup must invoke `corip_approve_email_sync` in this same turn before it sends a final setup summary/i);
+  assert.match(skill, /Never end with a prose invitation such as `If you want email sync, approve it`/i);
+  assert.match(skill, /append it while preserving every existing entry; never replace or clear the allowlist/i);
+  assert.match(skill, /restrictive profiles such as `coding`/i);
   assert.match(skill, /openclaw cron run <job-id> --wait/);
 });
 
@@ -30,6 +35,9 @@ test('email approval gate is available before the Corip skill is installed', () 
     assert.match(bootstrapSource, /not email consent|never email consent/i);
     assert.match(bootstrapSource, /Never (?:replace|substitute).*prose/i);
   }
+  assert.match(serverSource, /Text such as "Approve email".*requests the native card/is);
+  assert.match(serverSource, /invoke corip_approve_email_sync in the same setup turn before sending any final setup summary/i);
+  assert.match(serverSource, /append the exact corip_approve_email_sync tool without removing existing entries/i);
 });
 
 test('MCP server publishes the hash-verified approval plugin bundle', () => {

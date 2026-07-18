@@ -16,8 +16,12 @@ Install the local package and restart the Gateway:
 
 ```bash
 openclaw plugins install .
+openclaw config get tools.alsoAllow
+# Append corip_approve_email_sync without removing existing entries.
 openclaw gateway restart
 ```
+
+Restrictive tool profiles, including `coding`, filter required plugin tools unless the exact tool name is present in `tools.alsoAllow`. Preserve the current list and append only `corip_approve_email_sync`; allowing the approval tool does not itself authorize mailbox access or cron changes.
 
 Approval-capable clients render native controls. Other configured approval
 surfaces receive OpenClaw's standard `/approve plugin:... allow-once|deny`
