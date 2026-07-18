@@ -77,7 +77,6 @@ type DeliveryStatus = {
 };
 
 const API_URL = process.env.NEXT_PUBLIC_CORIP_API_URL ?? "https://corip-postings-kimmc3423.fly.dev";
-const CURRENT_AGENT_ID = process.env.NEXT_PUBLIC_CORIP_AGENT_ID ?? "mina-agent";
 
 const boards = {
   leisure: { label: "Leisure", english: "LEISURE", description: "Activities looking for people", color: "#526de6" },
@@ -242,7 +241,7 @@ export default function Home() {
 
     async function syncPostings() {
       try {
-        const response = await fetch(`${API_URL}/postings/search?agentId=${encodeURIComponent(CURRENT_AGENT_ID)}`, { cache: "no-store" });
+        const response = await fetch(`${API_URL}/postings/search`, { cache: "no-store" });
         if (!response.ok) throw new Error(`API ${response.status}`);
         const raw = await response.json() as ApiPosting[];
         if (cancelled) return;
@@ -420,7 +419,7 @@ export default function Home() {
         </nav>
 
         <header className="demo-board-head">
-          <div><h1>My requests</h1></div>
+          <div><h1>Open requests</h1></div>
           <div className="demo-board-count"><b>{apiPosts.filter((post) => post.board === activeBoard).length}</b><span>ON {current.english}</span></div>
         </header>
 
