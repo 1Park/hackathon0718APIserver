@@ -10,6 +10,8 @@ function toCamel(row) {
     country: row.country,
     city: row.city,
     place: row.place,
+    departure: row.departure,
+    destination: row.destination,
     date: row.date,
     time: row.time,
     minPeople: row.min_people,
@@ -23,7 +25,7 @@ function toCamel(row) {
 }
 
 const REQUIRED_FIELDS = [
-  'type', 'country', 'city', 'place', 'date', 'time',
+  'type', 'country', 'city', 'date', 'time',
   'minPeople', 'maxPeople', 'price', 'agentId',
 ];
 
@@ -35,6 +37,12 @@ function validateCreateInput(body) {
   }
   if (!VALID_TYPES.includes(body.type)) {
     return `type은 ${VALID_TYPES.join(', ')} 중 하나여야 합니다`;
+  }
+  if (body.type === 'taxi') {
+    if (!body.departure) return '필수 필드 누락: departure';
+    if (!body.destination) return '필수 필드 누락: destination';
+  } else if (!body.place) {
+    return '필수 필드 누락: place';
   }
   if (!Number.isInteger(body.minPeople) || !Number.isInteger(body.maxPeople)) {
     return 'minPeople, maxPeople는 정수여야 합니다';
@@ -53,10 +61,16 @@ function validateCreateInput(body) {
 
 function create(body) {
   const stmt = db.prepare(`
-    INSERT INTO postings (type, country, city, place, date, time, min_people, max_people, current_people, needs_nego, price, agent_id)
-    VALUES (@type, @country, @city, @place, @date, @time, @minPeople, @maxPeople, 0, 0, @price, @agentId)
+    INSERT INTO postings (type, country, city, place, departure, destination, date, time, min_people, max_people, current_people, needs_nego, price, agent_id)
+    VALUES (@type, @country, @city, @place, @departure, @destination, @date, @time, @minPeople, @maxPeople, 0, 0, @price, @agentId)
   `);
-  const result = stmt.run(body);
+  const isTaxi = body.type === 'taxi';
+  const result = stmt.run({
+    ...body,
+    place: isTaxi ? null : body.place,
+    departure: isTaxi ? body.departure : null,
+    destination: isTaxi ? body.destination : null,
+  });
   return getById(result.lastInsertRowid);
 }
 
@@ -70,7 +84,7 @@ function search({ q, type, country, city, date }) {
   const params = {};
 
   if (q) {
-    clauses.push('(type LIKE @q OR country LIKE @q OR city LIKE @q OR place LIKE @q)');
+    clauses.push('(type LIKE @q OR country LIKE @q OR city LIKE @q OR place LIKE @q OR departure LIKE @q OR destination LIKE @q)');
     params.q = `%${q}%`;
   }
   if (type) {

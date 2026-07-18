@@ -20,12 +20,14 @@ function toolError(message) {
 mcpServer.registerTool(
   'create_posting',
   {
-    description: '투어/레저/택시 참여인원 모집 공고를 등록한다',
+    description: '투어/레저/택시 참여인원 모집 공고를 등록한다. type이 taxi면 place 대신 departure/destination을 채운다',
     inputSchema: {
       type: z.enum(postings.VALID_TYPES),
       country: z.string(),
       city: z.string(),
-      place: z.string(),
+      place: z.string().optional(),
+      departure: z.string().optional(),
+      destination: z.string().optional(),
       date: z.string(),
       time: z.string(),
       minPeople: z.number().int(),
