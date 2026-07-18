@@ -109,6 +109,14 @@ function search({ q, type, country, city, date }) {
   return rows.map(toCamel);
 }
 
+function remove(id, agentId) {
+  const existing = db.prepare('SELECT * FROM postings WHERE id = ?').get(id);
+  if (!existing) return 'not_found';
+  if (existing.agent_id !== agentId) return 'forbidden';
+  db.prepare('DELETE FROM postings WHERE id = ?').run(id);
+  return 'ok';
+}
+
 function join(id) {
   const existing = db.prepare('SELECT * FROM postings WHERE id = ?').get(id);
   if (!existing) return null;
@@ -122,4 +130,4 @@ function join(id) {
   return getById(id);
 }
 
-module.exports = { validateCreateInput, create, getById, search, join, VALID_TYPES };
+module.exports = { validateCreateInput, create, getById, search, join, remove, VALID_TYPES };

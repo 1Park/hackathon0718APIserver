@@ -12,13 +12,14 @@ app.use(express.json());
 const USAGE_GUIDE_PATH = path.join(__dirname, '..', 'MCP_USAGE.md');
 
 const INSTRUCTIONS = `
-투어/레저/택시 참여인원 모집 공고 서버. 툴 4개: search_postings(검색), get_posting(단건조회), create_posting(등록), join_posting(참여인원+1).
+투어/레저/택시 참여인원 모집 공고 서버. 툴 5개: search_postings(검색), get_posting(단건조회), create_posting(등록), join_posting(참여인원+1), delete_posting(삭제).
 
 핵심 규칙:
 - type이 "taxi"면 place 대신 departure/destination을 채운다. tour/leisure는 place를 채운다.
 - country/city/place/departure/destination은 영어로 적는다.
 - needsNego가 true인 공고는 정원을 넘겨서라도 참여 신청이 들어온 상태 — 한 번 true가 되면 되돌아가지 않는다.
 - join_posting은 호출할 때마다 currentPeople을 +1 한다 (여러 명이면 그만큼 여러 번 호출).
+- delete_posting은 그 공고를 올린 agentId로만 삭제 가능하다 (다른 agentId면 거부됨).
 
 자세한 파라미터, 에러 메시지, 시나리오별 사용법은 리소스 "docs://mcp-usage"를 읽어라.
 `.trim();
@@ -116,6 +117,20 @@ mcpServer.registerTool(
   }
 );
 
+mcpServer.registerTool(
+  'delete_posting',
+  {
+    description: '자신이 올린 공고를 삭제한다. 공고를 올린 agentId와 일치해야만 삭제된다',
+    inputSchema: { id: z.union([z.string(), z.number()]), agentId: z.string() },
+  },
+  async ({ id, agentId }) => {
+    const result = postings.remove(id, agentId);
+    if (result === 'not_found') return toolError('공고를 찾을 수 없습니다');
+    if (result === 'forbidden') return toolError('본인이 올린 공고만 삭제할 수 있습니다');
+    return toolResult({ id, deleted: true });
+  }
+);
+
 app.post('/mcp', async (req, res) => {
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
   res.on('close', () => transport.close());
@@ -156,6 +171,22 @@ app.post('/postings/:id/join', (req, res) => {
     return res.status(404).json({ error: '공고를 찾을 수 없습니다' });
   }
   res.json(updated);
+});
+
+// 자신이 올린 공고를 삭제하는 API (agentId 일치해야 삭제됨)
+app.delete('/postings/:id', (req, res) => {
+  const { agentId } = req.query;
+  if (!agentId) {
+    return res.status(400).json({ error: '쿼리 파라미터 agentId가 필요합니다' });
+  }
+  const result = postings.remove(req.params.id, agentId);
+  if (result === 'not_found') {
+    return res.status(404).json({ error: '공고를 찾을 수 없습니다' });
+  }
+  if (result === 'forbidden') {
+    return res.status(403).json({ error: '본인이 올린 공고만 삭제할 수 있습니다' });
+  }
+  res.status(204).end();
 });
 
 // JSON 파싱 실패 등 잘못된 요청을 스택트레이스 대신 깔끔한 400으로 응답
