@@ -26,6 +26,7 @@ RUN npm ci
 
 # Copy application code
 COPY . .
+RUN npm test
 
 
 # Final stage for app image

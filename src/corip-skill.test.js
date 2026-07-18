@@ -64,7 +64,7 @@ test('Saturday trip planning requires all marketplaces, schedule persistence, an
     assert.match(source, /create_posting/i);
   }
   assert.match(skill, /Do not stop at “no Corip match”/i);
-  assert.match(skill, /call `join_posting` once to count that creator/i);
+  assert.match(skill, /server automatically counts that owner Agent as participant one/i);
   assert.match(skill, /verify the new posting with `get_posting`/i);
   assert.match(skill, /minPeople: 2.*maxPeople: 4/is);
   assert.match(skill, /first tool action must load and follow `skills\/corip\/SKILL\.md`/i);

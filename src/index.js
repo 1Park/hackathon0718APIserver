@@ -10,6 +10,13 @@ const { watchPosting } = require('./watch-posting');
 
 const app = express();
 app.use(express.json());
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
 
 const USAGE_GUIDE_PATH = path.join(__dirname, '..', 'MCP_USAGE.md');
 const CORIP_SKILL_PATH = path.join(__dirname, '..', 'skills', 'corip', 'SKILL.md');
@@ -25,7 +32,7 @@ const CORIP_APPROVAL_PLUGIN_FILES = [
 ];
 
 const INSTRUCTIONS = `
-Corip connects travelers through tour, leisure, and shared-taxi postings. It exposes six tools: search_postings, get_posting, create_posting, join_posting, delete_posting, and watch_posting.
+Corip connects travelers through tour, leisure, and shared-taxi postings. It exposes nine tools: search_postings, get_posting, create_posting, join_posting, confirm_posting_with_vendor, delete_posting, watch_posting, get_agent_notifications, and acknowledge_notification.
 
 Core rules:
 - Corip email permission must use the native corip_approve_email_sync tool. Never replace its approval card with a prose question. A skill_workshop or plugin-install approval is not email consent.
@@ -38,12 +45,13 @@ Core rules:
 - For "Plan a trip for this Saturday" and equivalent prompts, run separate domain-qualified searches for site:viator.com, site:getyourguide.com, and site:myrealtrip.com, then open one URL from each marketplace with web_fetch before selecting an activity. Repeating a generic query or using generic tourism results does not satisfy the three checks.
 - Persist the selected dated itinerary in the matching private trip plan using a stable corip-schedule date marker, and use an available writable calendar connector. Setting the schedule is required before the Corip action.
 - Select the strongest compatible activity from known constraints. Join an existing in-capacity posting automatically, or create a new posting as soon as all required fields are known.
-- An empty Corip search is not the end state: create a posting in the same turn from the selected schedule, count the creator with join_posting, and verify it with get_posting. Use minPeople 2 and maxPeople 4 when no recruitment target is given.
+- An empty Corip search is not the end state: create a posting in the same turn from the selected schedule and verify it with get_posting. The server automatically counts the owner Agent as the first participant. Use minPeople 2 and maxPeople 4 when no recruitment target is given.
 - Search existing postings before creating a new one.
 - Refresh a selected posting with get_posting before relying on its participant count.
 - Use place for tour and leisure postings. Use departure and destination for taxi postings.
 - Write country, city, place, departure, and destination in English.
-- Each join_posting call adds exactly one participant. When capacity is exceeded, needsNego becomes true and remains true.
+- Each join_posting call requires the joining agentId and adds that agent exactly once. When capacity is exceeded, needsNego becomes true and remains true.
+- When Vocal Bridge receives explicit vendor approval to proceed below the minimum, the posting owner must call confirm_posting_with_vendor. This completes coordination and sends every participant Agent a notification; do not wait for notification acknowledgement.
 - Only the matching owner agentId can delete a posting.
 - For travel-planning requests, use the private normalized trip and interest summaries described by the Corip skill before calling external services.
 - After creating or joining a posting, Personal Agents should call watch_posting with the returned currentPeople value. It checks every three seconds during the interactive demo. Notify the traveler only when state changes or minimum participation is reached.
@@ -148,6 +156,8 @@ mcpServer.registerTool(
     description: 'Create a participant posting for a tour, leisure activity, or shared taxi. For taxi postings, use departure and destination instead of place.',
     inputSchema: {
       type: z.enum(postings.VALID_TYPES),
+      title: z.string().optional(),
+      description: z.string().optional(),
       country: z.string(),
       city: z.string(),
       place: z.string().optional(),
@@ -199,13 +209,64 @@ mcpServer.registerTool(
 mcpServer.registerTool(
   'join_posting',
   {
-    description: 'Add one participant to a posting. If capacity is exceeded, needsNego becomes true.',
-    inputSchema: { id: z.union([z.string(), z.number()]) },
+    description: 'Add one Personal Agent to a posting. Duplicate joins by the same agentId do not increase the count.',
+    inputSchema: {
+      id: z.union([z.string(), z.number()]),
+      agentId: z.string(),
+    },
   },
-  async ({ id }) => {
-    const updated = postings.join(id);
+  async ({ id, agentId }) => {
+    const updated = postings.join(id, agentId);
     if (!updated) return toolError('Posting not found');
+    if (updated.error) return toolError(updated.error);
     return toolResult(updated);
+  }
+);
+
+mcpServer.registerTool(
+  'get_agent_notifications',
+  {
+    description: 'Get completed-coordination notifications addressed to one Personal Agent.',
+    inputSchema: {
+      agentId: z.string(),
+      afterId: z.number().int().nonnegative().optional(),
+    },
+  },
+  async ({ agentId, afterId }) => toolResult(postings.listNotifications(agentId, afterId ?? 0))
+);
+
+mcpServer.registerTool(
+  'confirm_posting_with_vendor',
+  {
+    description: 'Complete an under-minimum posting after Vocal Bridge receives explicit approval from the vendor. Only the posting owner may call this.',
+    inputSchema: {
+      id: z.union([z.string(), z.number()]),
+      agentId: z.string(),
+      source: z.literal('vocal_bridge').default('vocal_bridge'),
+      note: z.string().optional(),
+    },
+  },
+  async ({ id, agentId, source, note }) => {
+    const confirmed = postings.confirmByVendor(id, { agentId, source, note });
+    if (!confirmed) return toolError('Posting not found');
+    if (confirmed.error) return toolError(confirmed.error);
+    return toolResult(confirmed);
+  }
+);
+
+mcpServer.registerTool(
+  'acknowledge_notification',
+  {
+    description: 'Mark one notification as delivered to its Personal Agent.',
+    inputSchema: {
+      notificationId: z.union([z.string(), z.number()]),
+      agentId: z.string(),
+    },
+  },
+  async ({ notificationId, agentId }) => {
+    const notification = postings.acknowledgeNotification(notificationId, agentId);
+    if (!notification) return toolError('Notification not found');
+    return toolResult(notification);
   }
 );
 
@@ -226,7 +287,7 @@ mcpServer.registerTool(
 mcpServer.registerTool(
   'watch_posting',
   {
-    description: 'Watch one posting every three seconds until its participant count changes, its minimum group size is reached, negotiation is required, it is deleted, or the watch times out.',
+    description: 'Watch one posting every three seconds until its participant count changes, its minimum group size is reached, a vendor confirms it, negotiation is required, it is deleted, or the watch times out.',
     inputSchema: {
       id: z.union([z.string(), z.number()]),
       lastKnownPeople: z.number().int().nonnegative(),
@@ -284,13 +345,58 @@ app.get('/postings/:id/watch', async (req, res) => {
   res.json(await watchPosting(postings.getById, req.params.id, lastKnownPeople, timeoutSeconds));
 });
 
+// Human-readable board view of anonymized delivery progress.
+app.get('/postings/:id/delivery-status', (req, res) => {
+  const status = postings.getDeliveryStatus(req.params.id);
+  if (!status) {
+    return res.status(404).json({ error: 'Posting not found' });
+  }
+  res.json(status);
+});
+
 // Add one participant.
 app.post('/postings/:id/join', (req, res) => {
-  const updated = postings.join(req.params.id);
+  const updated = postings.join(req.params.id, req.body.agentId);
   if (!updated) {
     return res.status(404).json({ error: 'Posting not found' });
   }
+  if (updated.error) {
+    return res.status(400).json(updated);
+  }
   res.json(updated);
+});
+
+// Complete an under-minimum posting after a Vocal Bridge vendor call approves it.
+app.post('/postings/:id/confirm', (req, res) => {
+  const confirmed = postings.confirmByVendor(req.params.id, req.body);
+  if (!confirmed) {
+    return res.status(404).json({ error: 'Posting not found' });
+  }
+  if (confirmed.error) {
+    const forbidden = confirmed.error.includes('posting owner');
+    return res.status(forbidden ? 403 : 400).json(confirmed);
+  }
+  res.json(confirmed);
+});
+
+// Personal Agents poll this endpoint from their heartbeat loop.
+app.get('/agents/:agentId/notifications', (req, res) => {
+  const afterId = req.query.afterId === undefined ? 0 : Number(req.query.afterId);
+  if (!Number.isInteger(afterId) || afterId < 0) {
+    return res.status(400).json({ error: 'afterId must be a non-negative integer' });
+  }
+  res.json(postings.listNotifications(req.params.agentId, afterId));
+});
+
+app.post('/agents/:agentId/notifications/:notificationId/read', (req, res) => {
+  const notification = postings.acknowledgeNotification(
+    req.params.notificationId,
+    req.params.agentId
+  );
+  if (!notification) {
+    return res.status(404).json({ error: 'Notification not found' });
+  }
+  res.json(notification);
 });
 
 // Delete an owned posting. The agentId must match.

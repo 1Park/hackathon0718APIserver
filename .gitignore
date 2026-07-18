@@ -1,3 +1,10 @@
 node_modules/
 data.sqlite*
 server-data.sqlite*
+frontend/node_modules/
+frontend/.next/
+frontend/.vinext/
+frontend/dist/
+frontend/.wrangler/
+frontend/.pnpm-store/
+.DS_Store

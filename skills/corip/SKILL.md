@@ -39,11 +39,12 @@ When the user says “plan my trip,” “find something for me to do,” or an 
 1. Before asking any clarification, read the normalized context already produced by synchronization: `travel/corip/plans/`, `travel/corip/interests.md`, and relevant current-session or mock input. Do not reopen or search an email inbox. Use known dates, location, reservations, preferences, budget, party size, and free time; ask only when a required value remains missing after these sources are checked.
 2. Start web or travel-tool research immediately. Internally compare a small set of viable options and select the strongest option from the traveler's known interests and constraints. Do not make the user choose unless there is a material unresolved tradeoff.
 3. Before creating anything, call `search_postings` for a compatible `tour`, `leisure`, or `taxi` posting. Send only the minimum non-sensitive destination, date, type, place, or route fields.
-4. If a compatible posting exists, refresh it with `get_posting`. When it is within capacity and satisfies all constraints, call `join_posting` without another confirmation question and record locally that this agent joined it.
-5. If no compatible posting exists, infer or collect every required field and call `create_posting` immediately once the record is complete. Do not restate the completed record as a confirmation question. Count the creator's party with one `join_posting` call per participant and record the posting locally.
+4. If a compatible posting exists, refresh it with `get_posting`. When it is within capacity and satisfies all constraints, call `join_posting` with this Personal Agent's stable non-secret `agentId` without another confirmation question and record locally that this agent joined it.
+5. If no compatible posting exists, infer or collect every required field and call `create_posting` immediately once the record is complete. Do not restate the completed record as a confirmation question. The server automatically registers the owner Agent as the first participant, so do not call `join_posting` again for that same owner. Record the posting locally.
 6. Store active coordination state under `travel/corip/active-postings.json`, including posting id, role (`owner` or `participant`), joined count, last observed participant count, minimum and maximum people, and last notification state. Use this local state to prevent duplicate joins across background runs.
-7. Immediately after creating or joining, call `watch_posting` with the returned `currentPeople` as `lastKnownPeople`. During an interactive demo, continue the watch loop automatically until the group forms, negotiation is required, the posting disappears, or the session must end.
-8. Report what was selected and executed after the operation. Ask before acting only for the exceptions listed in the safety rules.
+7. Immediately after creating or joining, call `watch_posting` with the returned `currentPeople` as `lastKnownPeople`. During an interactive demo, continue the watch loop automatically until the group forms, a vendor confirms an under-minimum group, negotiation is required, the posting disappears, or the session must end.
+8. For a leisure or tour posting that remains below minimum, the owner Agent may use Vocal Bridge to call the vendor. Only after the vendor explicitly agrees to proceed with the smaller group, call `confirm_posting_with_vendor` with `source: vocal_bridge` and a short non-sensitive note. This completes the posting and triggers participant notifications. Never fabricate vendor approval.
+9. Report what was selected and executed after the operation. Ask before acting only for the exceptions listed in the safety rules.
 
 ## Show workflow progress in OpenClaw
 
@@ -67,10 +68,10 @@ Use two monitoring modes. The interactive watcher provides three-second feedback
 1. **Interactive mode:** after `create_posting` or `join_posting`, call `watch_posting` using the returned participant count. The tool checks the posting every three seconds for up to the supplied timeout.
 2. If it returns `changed`, update local state and call it again with the new count. Do not ask the user whether to continue.
 3. If it returns `waiting`, call it again while the interactive run remains active. Do not emit repetitive user messages.
-4. If it returns `formed`, notify once that the minimum group size was reached, update local state, and stop watching that posting.
+4. If it returns `formed` or `vendor_confirmed`, notify once that coordination completed, update local state, and stop watching that posting.
 5. If it returns `negotiation_required`, notify once and stop automatic execution pending negotiation.
 6. If it returns `deleted`, notify once and remove the posting from local state.
-7. **Background mode:** when the interactive run ends before formation, use Heartbeat or the `corip-posting-monitor` cron job. Read `travel/corip/active-postings.json` and call `get_posting` once for each active posting on each run. Remain silent when nothing changed.
+7. **Background mode:** when the interactive run ends before formation, use Heartbeat or the `corip-posting-monitor` cron job. Call `get_agent_notifications` with this Personal Agent's stable `agentId` and the last notification id. Deliver each new notification to the traveler once and persist the latest id; notification acknowledgement is not a prerequisite for completion. Use `get_posting` only as a fallback for older servers. Remain silent when nothing changed.
 8. Every agent that creates or joins a posting must monitor that posting independently so each traveler receives their own result without sharing private contact information.
 
 Use WebSocket only if the human-facing board needs live visual updates. Do not require WebSocket for Personal Agent coordination in the MVP.
@@ -88,8 +89,10 @@ Execute the following phases in order. Continue through all non-blocked phases a
    - `get_posting`
    - `create_posting`
    - `join_posting`
+   - `confirm_posting_with_vendor`
    - `delete_posting`
    - `watch_posting`
+   - `get_agent_notifications`
 4. Read `docs://mcp-usage` when available. Prefer the live schemas over examples in prose if they differ.
 5. Detect the user's OpenClaw agent id, workspace, IANA timezone, available email connector, active delivery route, and existing Corip MCP/skill/cron entries using redacted or narrowly scoped commands.
 6. Confirm that `corip_approve_email_sync` is available from the `corip-approvals` OpenClaw plugin and is permitted by the active tool policy. If it is missing:
@@ -220,7 +223,7 @@ Create one stable monitoring job named `corip-posting-monitor` when `travel/cori
 Use this monitoring message:
 
 ```text
-Monitor Corip active postings. Read travel/corip/active-postings.json. For each active posting id, call get_posting and compare currentPeople, minPeople, maxPeople, and needsNego with the stored state. Never call join_posting from this monitoring job unless the local record explicitly shows that this agent has not yet joined and the original trip-planning authorization and all constraints are still valid. If nothing changed, reply exactly NO_REPLY. If the minimum is reached for the first time, notify this traveler that the group is formed, mark that notification locally, and stop frequent polling for that posting. If needsNego becomes true or the posting disappears, notify once and update local state. Never duplicate a join or notification.
+Monitor Corip notifications for this Personal Agent. Read the stable local agent id and the last notification id from travel/corip/active-postings.json. Call get_agent_notifications with agentId and afterId. For each new coordination_completed notification, notify this traveler once and persist the newest notification id. The server already completes the coordination when it emits the notification; do not wait for or send an acknowledgement. Never call join_posting from this monitoring job unless the local record explicitly shows that this agent has not yet joined and the original trip-planning authorization and all constraints are still valid. If no notifications exist, reply exactly NO_REPLY. Never duplicate a join or notification.
 ```
 
 Create or update the cron with this one-minute schedule:
@@ -260,8 +263,8 @@ Use this workflow whenever the user asks for a travel plan, itinerary, destinati
 6. Research activity inventory on **all three named marketplaces** before selecting the schedule: run a separate domain-qualified web search for Viator (`site:viator.com`), GetYourGuide (`site:getyourguide.com`), and MyRealTrip (`site:myrealtrip.com`). The three query strings must contain their respective domains; repeating one generic query three times does not satisfy this step. Open one resulting marketplace URL per site with `web_fetch` (use that marketplace's destination/search page when no product result exists) and record whether the fetch succeeded. Record at least one candidate URL, displayed price, duration, and availability from each site when present; record `no matching result` when a marketplace has none. Do not replace these three searches or fetches with generic tourism pages. Generic or official sources may be used only as supplemental verification.
 7. Compare the marketplace candidates against confirmed transport, lodging, existing reservations, budget, party size, free time, and supported interests. Select one strongest bookable candidate without purchasing it. Use Sabre, when configured, only to fill flight gaps.
 8. **Set the user's schedule before posting.** Update the matching `travel/corip/plans/*.md` file with a dated schedule section containing start/end times, activity, place, selected marketplace URL, displayed price, transit buffer, and booking status. Use a stable marker `corip-schedule:<YYYY-MM-DD>` and replace the matching block on reruns instead of duplicating it. If a writable calendar tool is available, also create or update the corresponding calendar event; absence of a calendar connector does not excuse skipping the private plan update.
-9. Search Corip for a compatible tour or leisure posting using only destination, date, type, and selected place. Refresh a match with `get_posting` and join it immediately when compatible and within capacity.
-10. If no compatible posting exists, **create one in the same turn**. Derive date, start time, place, and displayed per-person price from the selected schedule; use the stable non-secret agent id, and use public recruitment defaults of `minPeople: 2` and `maxPeople: 4` when no explicit group-size target exists. Treat an unspecified traveler party as one creator, then call `join_posting` once to count that creator. Do not stop at “no Corip match” and do not ask for routine confirmation.
+9. Search Corip for a compatible tour or leisure posting using only destination, date, type, and selected place. Refresh a match with `get_posting` and join it immediately when compatible and within capacity, supplying this Personal Agent's stable `agentId`.
+10. If no compatible posting exists, **create one in the same turn**. Derive date, start time, place, and displayed per-person price from the selected schedule; use the stable non-secret agent id, and use public recruitment defaults of `minPeople: 2` and `maxPeople: 4` when no explicit group-size target exists. The server automatically counts that owner Agent as participant one; do not submit a duplicate owner join. Do not stop at “no Corip match” and do not ask for routine confirmation.
 11. Record the posting and schedule relationship in `travel/corip/active-postings.json`, start interactive or background monitoring, and verify the new posting with `get_posting`. Before writing, remove or replace every stale entry with the same posting id or `linkedScheduleMarker`; servers may reuse numeric ids after a database reset, and duplicate local records are invalid. Preserve unrelated postings. The final reply must include the schedule artifact or calendar evidence, the selected marketplace URL, and the Corip posting id and current participant state.
 12. Do not turn a one-off choice into a durable interest without repeated or explicit evidence. Never book or pay as part of this workflow.
 
@@ -274,7 +277,7 @@ Follow the live MCP schemas and `docs://mcp-usage` resource. Apply these stable 
 - Supply a stable, non-secret OpenClaw agent identifier as `agentId` when creating a posting.
 - When an active trip-planning request provides or implies every required field, call `create_posting` without asking for another confirmation.
 - Confirm again before `join_posting` when capacity is full; explain that this can set `needsNego`.
-- Call `join_posting` once per participant after deriving the participant count from current context. Ask only when that count is genuinely unknown.
+- Call `join_posting` once per Personal Agent, always supplying its stable `agentId`. Duplicate calls with the same posting and agent id are idempotent.
 - Call `delete_posting` only after `get_posting` verifies the id and ownership, and after explicit deletion confirmation.
 - Translate place fields to English when the live Corip contract requires it, while presenting results in the user's language.
 - Treat empty search results as a valid result, not a failure.
