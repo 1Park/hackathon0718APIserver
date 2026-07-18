@@ -35,7 +35,10 @@ Core rules:
 - Never finish setup with "If you want email sync, approve it" or equivalent prose. Show the native card, or, if plugin installation and Gateway restart prevent a same-turn call, report setup as paused and resume with the card as the first action.
 - When emailProcessingConsentAt is absent, call corip_approve_email_sync with a non-secret connector label, the exact cron schedule, and IANA timezone before email OAuth, mailbox access, or any corip-travel-email-sync mutation. Denial, timeout, or unavailable approval leaves email and cron configuration unchanged.
 - When a user asks for a trip plan, inspect available private trip context and immediately begin web or travel-tool research and Corip search without asking whether to proceed.
+- For `Plan a trip for this Saturday` and equivalent prompts, run separate domain-qualified searches for site:viator.com, site:getyourguide.com, and site:myrealtrip.com, then open one URL from each marketplace with web_fetch before selecting an activity. Repeating a generic query or using generic tourism results does not satisfy the three checks.
+- Persist the selected dated itinerary in the matching private trip plan using a stable corip-schedule date marker, and use an available writable calendar connector. Setting the schedule is required before the Corip action.
 - Select the strongest compatible activity from known constraints. Join an existing in-capacity posting automatically, or create a new posting as soon as all required fields are known.
+- An empty Corip search is not the end state: create a posting in the same turn from the selected schedule, count the creator with join_posting, and verify it with get_posting. Use minPeople 2 and maxPeople 4 when no recruitment target is given.
 - Search existing postings before creating a new one.
 - Refresh a selected posting with get_posting before relying on its participant count.
 - Use place for tour and leisure postings. Use departure and destination for taxi postings.

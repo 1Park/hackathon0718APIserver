@@ -126,11 +126,12 @@ Update the active agent workspace's `AGENTS.md` so Corip is loaded for generic t
 
 For every trip, itinerary, activity, tour, leisure, or ride request:
 
-1. Load and follow `skills/corip/SKILL.md` before replying. The user does not need to mention Corip.
-2. Before asking questions, read matching synchronized context from `travel/corip/plans/` and `travel/corip/interests.md`.
-3. When sufficient context exists, continue research, Corip search, compatible join, or posting creation automatically.
-4. Do not ask for information already present in synchronized context.
-5. Show the short `[CORIP n/6]` workflow progress statuses defined by the Corip skill.
+1. Your first tool action must load and follow `skills/corip/SKILL.md`; memory or a previous itinerary is not a substitute. The user does not need to mention Corip.
+2. Before asking questions, read matching synchronized context from `travel/corip/plans/` and `travel/corip/interests.md`. Resolve `this Saturday` to the Saturday inside the matching synchronized trip when one exists.
+3. For `Plan a trip for this Saturday`, do not reply until you have separately searched Viator, GetYourGuide, and MyRealTrip with domain-qualified queries, opened one URL from each marketplace with `web_fetch`, persisted the selected dated schedule in the matching private plan, searched Corip, and joined a compatible posting or created, joined, and verified a new one when search is empty.
+4. Do not ask for information already present in synchronized context. Use the Corip skill's public recruitment defaults for an otherwise complete plan.
+5. A general web search, a prose itinerary, or `No compatible Corip activity` is not completion evidence for step 3.
+6. Show the short `[CORIP n/6]` workflow progress statuses defined by the Corip skill and include marketplace, schedule, and posting evidence in the final reply.
 <!-- corip:standing-order:end -->
 ```
 
@@ -255,10 +256,14 @@ Use this workflow whenever the user asks for a travel plan, itinerary, destinati
 2. Treat synchronized reservations and explicit constraints as hard facts. Treat inferred interests as soft preferences.
 3. Let the user's latest explicit request override stored summaries and interests. Surface material conflicts instead of silently choosing an older value.
 4. Ask only for required facts that remain unavailable after checking synchronized artifacts and current context. Never ask for a value already present there and never invent prior preferences.
-5. Build the plan around confirmed dates, transport, lodging, activities, budget, party size, unresolved questions, and the strongest supported interests.
-6. Use Sabre, when configured, to fill flight gaps. Use Corip to search matching tour, leisure, and taxi postings. Send only the minimum destination, date, type, place, or route fields needed by each external service.
-7. Refresh a selected Corip result with `get_posting`. If it is compatible and within capacity, join it immediately. If no compatible posting exists, create one immediately when all required fields are known. Record the posting in `travel/corip/active-postings.json` and start monitoring it. Do not ask for another routine confirmation after the user requested the trip plan.
-8. Present the completed plan and Corip action after execution. Do not turn a one-off choice into a durable interest without repeated or explicit evidence.
+5. Resolve relative dates against the matching trip context. When the current day is Saturday but the synchronized trip starts on the following weekend, `this Saturday` means the Saturday inside that trip, not the current day.
+6. Research activity inventory on **all three named marketplaces** before selecting the schedule: run a separate domain-qualified web search for Viator (`site:viator.com`), GetYourGuide (`site:getyourguide.com`), and MyRealTrip (`site:myrealtrip.com`). The three query strings must contain their respective domains; repeating one generic query three times does not satisfy this step. Open one resulting marketplace URL per site with `web_fetch` (use that marketplace's destination/search page when no product result exists) and record whether the fetch succeeded. Record at least one candidate URL, displayed price, duration, and availability from each site when present; record `no matching result` when a marketplace has none. Do not replace these three searches or fetches with generic tourism pages. Generic or official sources may be used only as supplemental verification.
+7. Compare the marketplace candidates against confirmed transport, lodging, existing reservations, budget, party size, free time, and supported interests. Select one strongest bookable candidate without purchasing it. Use Sabre, when configured, only to fill flight gaps.
+8. **Set the user's schedule before posting.** Update the matching `travel/corip/plans/*.md` file with a dated schedule section containing start/end times, activity, place, selected marketplace URL, displayed price, transit buffer, and booking status. Use a stable marker `corip-schedule:<YYYY-MM-DD>` and replace the matching block on reruns instead of duplicating it. If a writable calendar tool is available, also create or update the corresponding calendar event; absence of a calendar connector does not excuse skipping the private plan update.
+9. Search Corip for a compatible tour or leisure posting using only destination, date, type, and selected place. Refresh a match with `get_posting` and join it immediately when compatible and within capacity.
+10. If no compatible posting exists, **create one in the same turn**. Derive date, start time, place, and displayed per-person price from the selected schedule; use the stable non-secret agent id, and use public recruitment defaults of `minPeople: 2` and `maxPeople: 4` when no explicit group-size target exists. Treat an unspecified traveler party as one creator, then call `join_posting` once to count that creator. Do not stop at “no Corip match” and do not ask for routine confirmation.
+11. Record the posting and schedule relationship in `travel/corip/active-postings.json`, start interactive or background monitoring, and verify the new posting with `get_posting`. Before writing, remove or replace every stale entry with the same posting id or `linkedScheduleMarker`; servers may reuse numeric ids after a database reset, and duplicate local records are invalid. Preserve unrelated postings. The final reply must include the schedule artifact or calendar evidence, the selected marketplace URL, and the Corip posting id and current participant state.
+12. Do not turn a one-off choice into a durable interest without repeated or explicit evidence. Never book or pay as part of this workflow.
 
 ## Corip operating rules
 

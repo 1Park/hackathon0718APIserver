@@ -199,13 +199,14 @@ Call it immediately after creating or joining. If it returns `changed` or `waiti
 ### Autonomous trip planning and coordination
 
 1. When the user asks for a trip plan, first read matching normalized artifacts in `travel/corip/plans/` and `travel/corip/interests.md`, then use current-session or mock input. Do not reopen or search email during planning.
-2. Begin web or travel-tool research immediately without asking whether to proceed. Internally compare viable candidates and select the strongest one from known constraints.
-3. Call `search_postings` for a compatible posting before creating anything.
-4. If a compatible posting exists, refresh it with `get_posting` and join it automatically when it is within capacity and all traveler constraints are known.
-5. If no compatible posting exists, call `create_posting` as soon as all required fields are known, then count the creator's party with one `join_posting` call per participant.
-6. Record the posting id and last observed state locally, then call `watch_posting` with the returned `currentPeople` value. It checks every three seconds during an active demo.
-7. Continue watching automatically on `changed` or `waiting`. When `formed` is returned, notify once and stop the interactive watcher.
-8. If the session ends before formation, continue durable monitoring with OpenClaw Heartbeat or cron using `get_posting`.
+2. For prompts such as `Plan a trip for this Saturday`, run three separate domain-qualified marketplace searches (`site:viator.com`, `site:getyourguide.com`, and `site:myrealtrip.com`) and open one resulting URL per marketplace with `web_fetch`. Repeated generic queries do not satisfy the checks. Capture candidate URLs, displayed prices, durations, availability, and fetch status, including an explicit no-result observation when needed. Generic tourism pages do not satisfy these marketplace checks.
+3. Select the strongest compatible candidate without booking, then persist the dated schedule in the matching private plan with a stable `corip-schedule:<YYYY-MM-DD>` marker. Update the same block on reruns. Also use a writable calendar connector when available.
+4. Call `search_postings` for a compatible posting before creating anything.
+5. If a compatible posting exists, refresh it with `get_posting` and join it automatically when it is within capacity and all traveler constraints are known.
+6. If no compatible posting exists, call `create_posting` in the same turn using the selected schedule's place, date, time, and displayed price. When no recruitment target is explicit, default to two minimum and four maximum participants; count an unspecified creator party as one with one `join_posting` call. Never stop after reporting an empty search result.
+7. Record the posting id, schedule marker, and last observed state locally, replacing stale records with the same id or schedule marker while preserving unrelated postings. Then verify with `get_posting` and call `watch_posting` with the returned `currentPeople` value.
+8. Continue watching automatically on `changed` or `waiting`. When `formed` is returned, notify once and stop the interactive watcher.
+9. If the session ends before formation, continue durable monitoring with OpenClaw Heartbeat or cron using `get_posting`.
 
 The current server does not push events to agents. `watch_posting` is three-second long polling for the live demo; Heartbeat or cron is the durable fallback. WebSocket is optional for the human-facing board UI.
 
