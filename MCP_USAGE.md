@@ -21,7 +21,11 @@ The server exposes six tools after connection.
 
 A request such as `Setup Corip skills based on "<mcp-url>"` explicitly requests both creation and application of the Skill Workshop proposal. Call `skill_workshop` with action `create`, then use its returned `proposal_id` to immediately call action `apply` with reason `User explicitly requested Corip setup.` The `apply` call creates the native approval card. Do not send `proposal created`, `once approved`, or similar prose between those calls.
 
+Use the exact UTF-8 content returned by `skill://corip/SKILL.md` as `proposal_content`. Do not summarize, shorten, rewrite, or replace it with a posting-only skill. Verify the installed skill is byte-for-byte or SHA-256 equivalent to the resource; a mismatch blocks setup and must never be reported as completion.
+
 After each `allow-once`, continue immediately to the next approval-gated setup action: apply the skill, install and activate the approval plugin when needed, then invoke `corip_approve_email_sync` for the separate email-consent card. Do not make the user repeat the setup request, and send the final setup summary only after all approved phases and verification have completed. A denial or timeout is not approval and leaves that phase unchanged.
+
+Plugin installation, the required Gateway restart, the native email-consent card, and approved background synchronization are part of Corip setup. They are not out of scope and do not require a second prose setup request. The original setup request requires showing the email card but does not grant email consent; only that card's `allow-once` result authorizes email access and cron mutation.
 
 ### Install native Corip approval controls
 

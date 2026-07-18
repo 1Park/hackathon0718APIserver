@@ -60,6 +60,20 @@ test('Corip setup immediately applies proposals and chains native approval cards
   }
 });
 
+test('Corip setup preserves the canonical skill and cannot omit email setup as out of scope', () => {
+  for (const source of [skill, usageGuide, serverSource]) {
+    assert.match(source, /exact UTF-8 (?:text|content)/i);
+    assert.match(source, /(?:Do not|Never) summarize, shorten, rewrite/i);
+    assert.match(source, /posting-only/i);
+    assert.match(source, /not out of scope|not separate optional scope|are part of Corip setup/i);
+    assert.match(source, /setup request requires showing the email card/i);
+    assert.match(source, /not itself email consent|does not grant email consent/i);
+  }
+  assert.match(serverSource, /Never report "Corip is set up" until/i);
+  assert.match(serverSource, /A posting-only skill plus MCP registration is incomplete setup/i);
+  assert.match(skill, /byte-for-byte or SHA-256 equivalent/i);
+});
+
 test('MCP server publishes the hash-verified approval plugin bundle', () => {
   assert.match(serverSource, /corip-openclaw-plugin-bundle-v1/);
   assert.match(serverSource, /crypto\.createHash\('sha256'\)/);

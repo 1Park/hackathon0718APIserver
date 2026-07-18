@@ -1,5 +1,6 @@
 import { type OpenClawPluginDefinition } from "openclaw/plugin-sdk/plugin-entry";
 export declare const EMAIL_SYNC_APPROVAL_TOOL = "corip_approve_email_sync";
+export declare const EMAIL_SYNC_APPROVAL_POLICY = "corip-email-sync-approval";
 type ToolEvent = {
     toolName: string;
     params?: Record<string, unknown>;

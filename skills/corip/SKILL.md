@@ -32,6 +32,7 @@ Accept a different Corip endpoint only when the user explicitly supplies it. Req
 8. Never ask for email-sync permission in prose. Invoke `corip_approve_email_sync` so OpenClaw creates a native approval card. A Skill Workshop, plugin-install, command-execution, or OAuth approval is not Corip email-sync consent.
 9. Treat chat text such as `Approve email`, `approve sync`, `yes`, or any other affirmative prose as a request to open the native card, never as consent. Invoke `corip_approve_email_sync` and wait for its `allow-once` result. Do not access Gmail, inspect mailbox metadata, process messages, or mutate `corip-travel-email-sync` based only on chat text.
 10. Chain approval-gated setup phases. After every `allow-once`, continue immediately to the next setup phase and invoke its approval-gated tool call. Never replace an available approval call with progress prose, never make the user repeat the setup request, and do not send the final setup summary until all approved phases have executed and final verification is complete. A denial or timeout stops only the affected phase and must not be reported as approval.
+11. Treat plugin installation, Gateway restart, the native email-consent card, and approved background synchronization as required Corip setup phases, not separate optional scope. The setup request requires showing the email card but is not itself email consent. Never write or install a reduced posting-only replacement for this canonical skill.
 
 ## Autonomous trip planning and coordination
 
@@ -112,7 +113,7 @@ When setup begins from an MCP resource and the Corip skill is not installed, use
 
 ### 2. Install and verify the Corip skill
 
-When this file is delivered as an MCP resource, save the exact trusted resource content as `<workspace>/skills/corip/SKILL.md`. Do not synthesize a different skill from the remote usage guide.
+When this file is delivered as an MCP resource, pass this exact UTF-8 content unchanged as the Skill Workshop `proposal_content`, then verify that the applied `<workspace>/skills/corip/SKILL.md` is byte-for-byte or SHA-256 equivalent. Do not summarize, shorten, rewrite, or synthesize a different skill from the resource or usage guide. If exact installation cannot be verified, mark setup blocked; never install a substitute and never report setup complete.
 
 The Corip MCP publisher should expose this file as a Markdown resource with URI `skill://corip/SKILL.md`. If that resource is unavailable, keep the rest of setup usable but mark skill installation as blocked and give the publisher-facing remediation.
 
@@ -134,6 +135,8 @@ Update the active agent workspace's `AGENTS.md` so Corip is loaded for generic t
 ## Corip standing order
 
 For `Setup Corip skills based on "<mcp-url>"` and equivalent setup requests, treat the request as explicit authorization to call `skill_workshop` action `create` and then immediately call action `apply` with the returned `proposal_id`. Never stop after proposal creation or ask for approval in prose. After each native `allow-once`, continue to the next setup approval card and finish all approved phases before summarizing.
+
+Setup is incomplete until the canonical skill is installed without rewriting, the approval plugin is loaded, the email-consent card has an explicit result, and the email-sync cron state matches that result. Never reduce setup to a posting-only skill and MCP registration or declare email, plugin installation, synchronization, or required restarts out of scope.
 
 For every trip, itinerary, activity, tour, leisure, or ride request:
 

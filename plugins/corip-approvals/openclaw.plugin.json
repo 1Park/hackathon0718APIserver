@@ -12,6 +12,9 @@
     "onStartup": true
   },
   "contracts": {
+    "trustedToolPolicies": [
+      "corip-email-sync-approval"
+    ],
     "tools": [
       "corip_approve_email_sync"
     ]
