@@ -162,7 +162,7 @@ Deletion is irreversible. Refresh the posting, verify ownership, and obtain expl
 
 ### Autonomous trip planning and coordination
 
-1. When the user asks for a trip plan, read available private email summaries, calendar, reservations, interests, budget, party size, and free time.
+1. When the user asks for a trip plan, start from the trip details supplied by the user, current session, or mock input. Do not search email.
 2. Begin web or travel-tool research immediately without asking whether to proceed. Internally compare viable candidates and select the strongest one from known constraints.
 3. Call `search_postings` for a compatible posting before creating anything.
 4. If a compatible posting exists, refresh it with `get_posting` and join it automatically when it is within capacity and all traveler constraints are known.
@@ -174,7 +174,7 @@ The current server does not push events to agents. Use polling for the MVP. WebS
 
 ### Find a travel opportunity
 
-1. Read relevant private normalized plan and interest summaries according to the Corip Skill.
+1. Read the trip constraints and preferences supplied in the current context according to the Corip Skill.
 2. Send only minimal destination, date, category, place, or route filters to Corip.
 3. Call `search_postings`.
 4. Rank compatible results without exposing private source data.
@@ -190,7 +190,7 @@ The current server does not push events to agents. Use polling for the MVP. WebS
 ### Create a posting
 
 1. Search for compatible existing postings.
-2. Gather all required fields without sending raw email or private identifiers to Corip.
+2. Gather all required fields without sending private identifiers to Corip.
 3. Confirm the complete posting according to the Corip Skill.
 4. Call `create_posting` once.
 5. Report the created id and initial recruitment state.
