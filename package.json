@@ -11,8 +11,8 @@
     "build:web": "npm --prefix frontend run build",
     "demo": "node scripts/demo.js",
     "start": "node src/index.js",
-    "test": "node --test src/*.test.js",
-    "test:all": "npm test && npm run build:web"
+    "dev": "PORT=3080 node --watch --watch-preserve-output --watch-path=src --watch-path=skills/corip src/index.js",
+    "test": "node --test src/*.test.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
