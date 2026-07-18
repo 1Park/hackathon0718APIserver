@@ -1,0 +1,19 @@
+{
+  "id": "corip-approvals",
+  "name": "Corip Approvals",
+  "description": "Show a native approval card before Corip accesses travel email or enables synchronization.",
+  "version": "0.2.0",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  },
+  "activation": {
+    "onStartup": true
+  },
+  "contracts": {
+    "tools": [
+      "corip_approve_email_sync"
+    ]
+  }
+}

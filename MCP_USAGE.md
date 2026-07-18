@@ -17,6 +17,22 @@ openclaw mcp probe corip --json
 
 The server exposes six tools after connection.
 
+### Install native Corip approval controls
+
+The Skill cannot create an OpenClaw approval card by prose alone. Install the bundled native plugin before the email phase so setup can call `corip_approve_email_sync`:
+
+```bash
+cd plugins/corip-approvals
+npm install
+npm run plugin:validate
+openclaw plugins install .
+openclaw gateway restart
+```
+
+When setup starts from only the public MCP URL and the tool is missing, read `plugin://corip-approvals/bundle.json`. Accept only format `corip-openclaw-plugin-bundle-v1`, plugin id `corip-approvals`, and the exact unique path set `package.json`, `openclaw.plugin.json`, `dist/index.js`, and `README.md`. Reject absolute paths, traversal, links, extra or duplicate files, manifest id mismatch, or any lowercase SHA-256 digest mismatch. Materialize the verified files in a new narrowly scoped temporary directory, install that directory with `openclaw plugins install <temporary-directory>`, restart the Gateway, and stop the current setup turn. Resume only after `corip_approve_email_sync` is available.
+
+The plugin-install or Skill Workshop approval authorizes only that named operation. It is not email consent. After the plugin is loaded, call `corip_approve_email_sync` with the non-secret connector label, exact cron expression, and IANA timezone. The resulting native card covers read-only travel-email access, model-assisted local summaries, and the recurring `corip-travel-email-sync` cron. Never substitute a prose permission question. On denial, timeout, or missing approval routing, leave email and cron configuration unchanged.
+
 ### Install the Corip OpenClaw Skill
 
 An MCP connection supplies tools. The Corip Skill defines when and how OpenClaw should set up and use them. From this repository, install it with:

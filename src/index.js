@@ -1,5 +1,6 @@
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 const express = require('express');
 const { z } = require('zod');
 const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
@@ -14,11 +15,22 @@ const USAGE_GUIDE_PATH = path.join(__dirname, '..', 'MCP_USAGE.md');
 const CORIP_SKILL_PATH = path.join(__dirname, '..', 'skills', 'corip', 'SKILL.md');
 const CORIP_SKILL_URI = 'skill://corip/SKILL.md';
 const LEGACY_CORIP_SKILL_URI = 'docs://corip-skill';
+const CORIP_APPROVAL_PLUGIN_URI = 'plugin://corip-approvals/bundle.json';
+const CORIP_APPROVAL_PLUGIN_ROOT = path.join(__dirname, '..', 'plugins', 'corip-approvals');
+const CORIP_APPROVAL_PLUGIN_FILES = [
+  'package.json',
+  'openclaw.plugin.json',
+  'dist/index.js',
+  'README.md',
+];
 
 const INSTRUCTIONS = `
 Corip connects travelers through tour, leisure, and shared-taxi postings. It exposes six tools: search_postings, get_posting, create_posting, join_posting, delete_posting, and watch_posting.
 
 Core rules:
+- Corip email permission must use the native corip_approve_email_sync tool. Never replace its approval card with a prose question. A skill_workshop or plugin-install approval is not email consent.
+- If corip_approve_email_sync is unavailable, install the hash-verified plugin bundle from plugin://corip-approvals/bundle.json, restart the Gateway, and stop the current setup turn. Do not report setup complete; resume only after the tool is available.
+- When emailProcessingConsentAt is absent, call corip_approve_email_sync with a non-secret connector label, the exact cron schedule, and IANA timezone before email OAuth, mailbox access, or any corip-travel-email-sync mutation. Denial, timeout, or unavailable approval leaves email and cron configuration unchanged.
 - When a user asks for a trip plan, inspect available private trip context and immediately begin web or travel-tool research and Corip search without asking whether to proceed.
 - Select the strongest compatible activity from known constraints. Join an existing in-capacity posting automatically, or create a new posting as soon as all required fields are known.
 - Search existing postings before creating a new one.
@@ -30,7 +42,7 @@ Core rules:
 - For travel-planning requests, use the private normalized trip and interest summaries described by the Corip skill before calling external services.
 - After creating or joining a posting, Personal Agents should call watch_posting with the returned currentPeople value. It checks every three seconds during the interactive demo. Notify the traveler only when state changes or minimum participation is reached.
 
-Read "skill://corip/SKILL.md" for setup, cron, travel-planning, privacy, and operating rules. Read "docs://mcp-usage" for detailed schemas, examples, and error handling.
+Read "skill://corip/SKILL.md" for setup, cron, travel-planning, privacy, and operating rules. Read "plugin://corip-approvals/bundle.json" when the native approval tool is missing. Read "docs://mcp-usage" for detailed schemas, examples, and error handling.
 `.trim();
 
 const mcpServer = new McpServer(
@@ -75,6 +87,44 @@ mcpServer.registerResource(
   },
   async (uri) => ({
     contents: [{ uri: uri.href, mimeType: 'text/markdown', text: fs.readFileSync(CORIP_SKILL_PATH, 'utf-8') }],
+  })
+);
+
+function sha256(content) {
+  return crypto.createHash('sha256').update(content).digest('hex');
+}
+
+function buildApprovalPluginBundle() {
+  const manifest = JSON.parse(
+    fs.readFileSync(path.join(CORIP_APPROVAL_PLUGIN_ROOT, 'openclaw.plugin.json'), 'utf-8')
+  );
+  const files = CORIP_APPROVAL_PLUGIN_FILES.map((relativePath) => {
+    const content = fs.readFileSync(path.join(CORIP_APPROVAL_PLUGIN_ROOT, relativePath), 'utf-8');
+    return { path: relativePath, sha256: sha256(content), content };
+  });
+  return {
+    format: 'corip-openclaw-plugin-bundle-v1',
+    pluginId: manifest.id,
+    version: manifest.version,
+    installDirectoryName: 'corip-approvals',
+    files,
+  };
+}
+
+mcpServer.registerResource(
+  'corip-approval-plugin',
+  CORIP_APPROVAL_PLUGIN_URI,
+  {
+    title: 'Corip OpenClaw Approval Plugin Bundle',
+    description: 'Hash-verifiable native plugin for the Corip email synchronization approval card',
+    mimeType: 'application/json',
+  },
+  async (uri) => ({
+    contents: [{
+      uri: uri.href,
+      mimeType: 'application/json',
+      text: JSON.stringify(buildApprovalPluginBundle()),
+    }],
   })
 );
 

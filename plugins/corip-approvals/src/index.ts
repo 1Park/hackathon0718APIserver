@@ -1,0 +1,95 @@
+import { Type } from "typebox";
+import {
+  definePluginEntry,
+  type OpenClawPluginDefinition,
+} from "openclaw/plugin-sdk/plugin-entry";
+
+export const EMAIL_SYNC_APPROVAL_TOOL = "corip_approve_email_sync";
+
+type ToolEvent = {
+  toolName: string;
+  params?: Record<string, unknown>;
+};
+
+type ApprovalRequest = {
+  title: string;
+  description: string;
+  severity: "warning";
+  allowedDecisions: ["allow-once", "deny"];
+  timeoutMs: number;
+};
+
+function boundedLabel(value: unknown, fallback: string): string {
+  if (typeof value !== "string") return fallback;
+  const normalized = value.trim().replace(/\s+/g, " ");
+  return normalized ? normalized.slice(0, 80) : fallback;
+}
+
+export function approvalForTool(event: ToolEvent): ApprovalRequest | undefined {
+  if (event.toolName !== EMAIL_SYNC_APPROVAL_TOOL) return;
+
+  const connector = boundedLabel(event.params?.connector, "the configured email connector");
+  const schedule = boundedLabel(event.params?.schedule, "the configured schedule");
+  const timezone = boundedLabel(event.params?.timezone, "the configured timezone");
+  return {
+    title: "Enable Corip email sync",
+    description:
+      `Allow read-only travel-email access through ${connector}, local model-assisted summaries, ` +
+      `and corip-travel-email-sync on ${schedule} (${timezone}).`,
+    severity: "warning",
+    allowedDecisions: ["allow-once", "deny"],
+    timeoutMs: 120_000,
+  };
+}
+
+function requiredString(params: unknown, key: string): string {
+  if (!params || typeof params !== "object") return "";
+  const value = (params as Record<string, unknown>)[key];
+  return typeof value === "string" ? value : "";
+}
+
+const plugin: OpenClawPluginDefinition = definePluginEntry({
+  id: "corip-approvals",
+  name: "Corip Approvals",
+  description: "Require a native approval card before Corip email synchronization setup.",
+  register(api) {
+    api.registerTool({
+      name: EMAIL_SYNC_APPROVAL_TOOL,
+      label: "Approve Corip email sync",
+      description:
+        "Request native user approval before Corip accesses travel email or changes the " +
+        "corip-travel-email-sync cron. Always call this instead of asking in prose.",
+      parameters: Type.Object(
+        {
+          connector: Type.String({
+            description: "Non-secret connector label, such as Gmail or Outlook.",
+          }),
+          schedule: Type.String({ description: "Cron expression shown to the user." }),
+          timezone: Type.String({ description: "IANA timezone shown to the user." }),
+        },
+        { additionalProperties: false },
+      ),
+      async execute(_id, params) {
+        const result = {
+          approved: true,
+          permission: "corip-travel-email-sync",
+          connector: requiredString(params, "connector"),
+          schedule: requiredString(params, "schedule"),
+          timezone: requiredString(params, "timezone"),
+        };
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify(result) }],
+          details: result,
+        };
+      },
+    });
+
+    api.on("before_tool_call", async (event) => {
+      const requireApproval = approvalForTool(event);
+      if (!requireApproval) return;
+      return { requireApproval };
+    });
+  },
+});
+
+export default plugin;

@@ -22,13 +22,14 @@ Accept a different Corip endpoint only when the user explicitly supplies it. Req
 
 ## Safety and privacy rules
 
-1. Treat a request such as `Setup Corip skills based on "<mcp-url>"` as approval to inspect capabilities, install or refresh this skill, register MCP definitions, create or update the Corip posting monitor, and create or update the managed Corip standing-order block in the active workspace's `AGENTS.md`. The setup request does not authorize creating, updating, enabling, or disabling the email-sync cron, granting mailbox access, or processing mailbox data. Before any of those email-sync actions, obtain the user's explicit approval because selected email content is processed by the configured model provider.
+1. Treat a request such as `Setup Corip skills based on "<mcp-url>"` as approval to inspect capabilities, install or refresh this skill and the `corip-approvals` plugin, register MCP definitions, create or update the Corip posting monitor, and create or update the managed Corip standing-order block in the active workspace's `AGENTS.md`. The setup request does not authorize creating, updating, enabling, or disabling the email-sync cron, granting mailbox access, or processing mailbox data. Before any of those email-sync actions, obtain the user's explicit approval through `corip_approve_email_sync` because selected email content is processed by the configured model provider.
 2. Never ask the user to paste API keys, OAuth tokens, email passwords, or mailbox contents into chat. Use the provider's local OAuth flow, OpenClaw SecretRefs, or environment-variable references.
 3. Never read or print an entire `openclaw.json`, `.env`, credential store, or auth profile. Use scoped OpenClaw CLI commands that redact secrets and preserve unrelated configuration.
 4. Never send raw email bodies, passenger data, confirmation numbers, payment details, or unrelated private context to the public Corip MCP. Send only the minimum non-sensitive posting fields required by the workflow.
 5. Treat a direct trip-planning or coordination request as standing authorization to research, search Corip, join an in-capacity compatible posting, or create a posting when all required values and traveler constraints are known. Do not pause for routine confirmation. Still require confirmation for deletion, unexpected new cost, over-capacity negotiation, booking, payment, sending email, or an action that conflicts with an explicit constraint.
 6. Treat email-derived interests as tentative travel preferences, not facts. Do not infer health, religion, ethnicity, politics, sexuality, finances, or other sensitive traits. Record evidence dates and confidence, and make the profile inspectable and deletable.
 7. Preserve existing configuration. Create a backup before any direct file edit; prefer `openclaw mcp`, `openclaw config`, `openclaw cron`, and `openclaw skills` commands instead.
+8. Never ask for email-sync permission in prose. Invoke `corip_approve_email_sync` so OpenClaw creates a native approval card. A Skill Workshop, plugin-install, command-execution, or OAuth approval is not Corip email-sync consent.
 
 ## Autonomous trip planning and coordination
 
@@ -90,7 +91,9 @@ Execute the following phases in order. Continue through all non-blocked phases a
    - `watch_posting`
 4. Read `docs://mcp-usage` when available. Prefer the live schemas over examples in prose if they differ.
 5. Detect the user's OpenClaw agent id, workspace, IANA timezone, available email connector, active delivery route, and existing Corip MCP/skill/cron entries using redacted or narrowly scoped commands.
-6. Ask one compact question for all genuinely missing choices. If durable email-processing consent is absent, the question must explicitly ask whether the user approves read-only travel-email access, model-assisted extraction into local workspace documents, and enabling the recurring email-sync cron. Wait for the answer; lack of a response is not a denial and must never be converted into a disabled cron. Default the sync cadence to every 30 minutes, the timezone to the user's OpenClaw timezone, and document storage to `travel/corip/` inside the active workspace.
+6. Confirm that `corip_approve_email_sync` is available from the `corip-approvals` OpenClaw plugin. If it is missing, read `plugin://corip-approvals/bundle.json` from the same trusted Corip MCP endpoint. Accept only format `corip-openclaw-plugin-bundle-v1`, plugin id `corip-approvals`, and the exact unique path set `package.json`, `openclaw.plugin.json`, `dist/index.js`, and `README.md`. Reject absolute paths, traversal, links, extra or duplicate files, a manifest id mismatch, or any lowercase SHA-256 digest mismatch. Materialize the verified files in a new narrowly scoped temporary directory, install it with `openclaw plugins install <temporary-directory>`, remove only that temporary directory, restart the Gateway, and stop the current setup turn. Resume only after the tool is available. Do not report setup complete while plugin installation or restart is pending.
+7. Detect the user's OpenClaw agent id, workspace, IANA timezone, available email connector, active delivery route, and existing Corip MCP/skill/cron entries using redacted or narrowly scoped commands. Default the sync cadence to every 30 minutes, the timezone to the user's OpenClaw timezone, and document storage to `travel/corip/` inside the active workspace.
+8. Ask one compact ordinary question only for genuinely missing operational values. Never use a prose question for email permission.
 
 ### 2. Install and verify the Corip skill
 
@@ -164,9 +167,9 @@ Guide the user to create or select a Vocal Bridge agent and add the Corip MCP UR
 
 ### 7. Connect email read access
 
-1. Check `travel/corip/setup.json` for a valid `emailProcessingConsentAt` without reading secrets. If the marker is absent, ask the user this approval question before taking any email-related action: `Corip이 여행 관련 이메일을 읽기 전용으로 확인하고, 선택된 내용을 모델로 처리해 로컬 여행 문서를 갱신하며, 30분 간격 동기화 cron을 활성화하도록 승인하시겠어요?` State the actual cadence instead of 30 minutes when the user chose another schedule.
-2. Stop and wait for the user's answer. Do not create, update, enable, or disable `corip-travel-email-sync` while approval is unanswered. Do not interpret silence, timeout, a missing connector, or a setup error as rejection.
-3. If the user declines, leave any email connector and cron configuration unchanged, label email synchronization `skipped by user`, and continue only the non-email setup phases.
+1. Check `travel/corip/setup.json` for a valid `emailProcessingConsentAt` without reading secrets. If the marker is absent, invoke `corip_approve_email_sync` with only the non-secret connector label, exact cron schedule, and IANA timezone. This tool call must create the native `allow-once`/`deny` approval card covering read-only travel-email access, model-assisted local summaries, and the recurring email-sync cron.
+2. Stop and wait inside the approval tool call. Do not ask in prose and do not create, update, enable, or disable `corip-travel-email-sync` before the tool returns approval. Do not interpret silence, timeout, a missing approval route, a missing connector, or a setup error as approval.
+3. If the approval is denied, times out, or is unavailable, leave any email connector and cron configuration unchanged, label email synchronization `skipped by user` for an explicit denial or `action required` otherwise, and continue only the non-email setup phases.
 4. After approval, reuse an existing email connector if it has read-only inbox access. Otherwise start the provider's local OAuth setup flow.
 5. Request the narrowest practical permissions: read message metadata and bodies needed for travel extraction. Do not request send, delete, or mailbox-management permissions for this workflow.
 6. Limit ingestion to travel-related messages, such as airline, lodging, rail, activity, reservation, and itinerary emails. Exclude unrelated mail.
@@ -175,16 +178,16 @@ Guide the user to create or select a Vocal Bridge agent and add the Corip MCP UR
    - `travel/corip/interests.md` for tentative preference evidence
    - `travel/corip/checkpoint.json` for the last successfully processed message or timestamp
    - `travel/corip/setup.json` for non-secret setup state, including consent time, connector name, schedule, and timezone
-8. Treat a valid `emailProcessingConsentAt` value as durable consent on an idempotent setup rerun. Ask again if the scope expands or the connector account changes.
+8. After native approval, persist `emailProcessingConsentAt` with the approved connector, schedule, and timezone. Treat that matching value as durable consent on an idempotent setup rerun. Invoke the approval tool again if the scope expands, the connector account changes, or the schedule or timezone changes.
 9. Do not mark email setup complete until a read-only test can identify a message without printing its body into setup logs.
 
 ### 8. Create the email synchronization cron
 
-Use one stable job name: `corip-travel-email-sync`. A read-only `openclaw cron list --json` inspection is allowed before approval, but do not mutate the job until explicit approval or durable consent exists. After approval, update the exact-name match in place and never create duplicates.
+Use one stable job name: `corip-travel-email-sync`. A read-only `openclaw cron list --json` inspection is allowed before approval, but do not mutate the job until a successful `corip_approve_email_sync` result or matching durable consent exists. After approval, update the exact-name match in place and never create duplicates.
 
 Use the user's chosen schedule, or default to `*/30 * * * *` in the detected IANA timezone. Prefer an isolated agent session. Announce only when documents changed, an actionable match was found, or a run failed; return `NO_REPLY` when nothing changed.
 
-After approval, enable the job only when all three readiness conditions hold: durable email-processing consent exists, the read-only connector test succeeds, and the workspace artifact paths are writable. If an approved setup cannot satisfy those conditions, the job may remain or be created disabled, but immediately tell the user the concrete reason and next action. Never silently use `disabled` as the outcome of an unanswered approval request.
+After native approval, enable the job only when all three readiness conditions hold: matching durable email-processing consent exists, the read-only connector test succeeds, and the workspace artifact paths are writable. If an approved setup cannot satisfy those conditions, the job may remain or be created disabled, but immediately tell the user the concrete reason and next action. Never silently use `disabled` as the outcome of a denied, timed-out, or unavailable approval card.
 
 Use this cron message verbatim unless local tool names require a minimal adaptation:
 
@@ -227,7 +230,8 @@ Verify each item independently:
 - Corip MCP probe lists all six expected tools.
 - Sabre setup card was shown; probe succeeds if enabled.
 - Vocal Bridge setup page was shown; connection is labeled accurately.
-- Email approval was explicitly granted or is backed by durable consent; otherwise it is `blocked` while awaiting an answer or `skipped by user` after an explicit rejection. An unanswered request must not be reported as rejection.
+- The `corip-approvals` plugin is loaded and `corip_approve_email_sync` is available.
+- Email approval was granted through the native approval card or is backed by matching durable consent; otherwise it is `skipped by user` after explicit denial or `action required` after timeout/unavailability. A Skill Workshop or plugin-install approval is not evidence of email consent.
 - When approved, the email connector has read-only access and passed a privacy-preserving test, or is labeled `action required` with the concrete reason.
 - When approved, exactly one `corip-travel-email-sync` job exists with the expected schedule and timezone. It is enabled when email readiness is complete; any disabled state is explicitly reported with its reason and next action. When approval is unanswered or declined, setup did not mutate the job.
 - At most one `corip-posting-monitor` job exists, and it is enabled only while active postings require monitoring.
@@ -269,7 +273,8 @@ To distribute this skill from the Corip MCP server, expose at least:
 
 - `skill://corip/SKILL.md` with this file's exact UTF-8 Markdown content and `text/markdown` MIME type.
 - `docs://mcp-usage` with the live Corip tool guide.
-- `resources/list` and `resources/read` for both resources.
+- `plugin://corip-approvals/bundle.json` with the hash-verifiable native approval plugin bundle described in preflight.
+- `resources/list` and `resources/read` for all resources.
 - The five Corip tools listed in preflight.
 
 Version the skill resource or attach an ETag/hash so clients can compare before updating. Keep setup instructions and tool schemas backward compatible, and never embed shared secrets or user-specific values in the resource.
