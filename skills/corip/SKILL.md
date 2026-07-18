@@ -38,7 +38,7 @@ When the user says “plan my trip,” “find something for me to do,” or an 
 
 1. Before asking any clarification, read the normalized context already produced by synchronization: `travel/corip/plans/`, `travel/corip/interests.md`, and relevant current-session or mock input. Do not reopen or search an email inbox. Use known dates, location, reservations, preferences, budget, party size, and free time; ask only when a required value remains missing after these sources are checked.
 2. Start web or travel-tool research immediately. Internally compare a small set of viable options and select the strongest option from the traveler's known interests and constraints. Do not make the user choose unless there is a material unresolved tradeoff.
-3. Before creating anything, call `search_postings` for a compatible `tour`, `leisure`, or `taxi` posting. Send only the minimum non-sensitive destination, date, type, place, or route fields.
+3. Before creating anything, call `search_postings` for a compatible `tour`, `leisure`, or `taxi` posting. Send only the minimum non-sensitive destination, date, type, place, or route fields. Use `agentId` only when retrieving postings this Personal Agent created or joined.
 4. If a compatible posting exists, refresh it with `get_posting`. When it is within capacity and satisfies all constraints, call `join_posting` with this Personal Agent's stable non-secret `agentId` without another confirmation question and record locally that this agent joined it.
 5. If no compatible posting exists, infer or collect every required field and call `create_posting` immediately once the record is complete. Do not restate the completed record as a confirmation question. The server automatically registers the owner Agent as the first participant, so do not call `join_posting` again for that same owner. Record the posting locally.
 6. Store active coordination state under `travel/corip/active-postings.json`, including posting id, role (`owner` or `participant`), joined count, last observed participant count, minimum and maximum people, and last notification state. Use this local state to prevent duplicate joins across background runs.
@@ -93,6 +93,7 @@ Execute the following phases in order. Continue through all non-blocked phases a
    - `delete_posting`
    - `watch_posting`
    - `get_agent_notifications`
+   - `acknowledge_notification`
 4. Read `docs://mcp-usage` when available. Prefer the live schemas over examples in prose if they differ.
 5. Detect the user's OpenClaw agent id, workspace, IANA timezone, available email connector, active delivery route, and existing Corip MCP/skill/cron entries using redacted or narrowly scoped commands.
 6. Confirm that `corip_approve_email_sync` is available from the `corip-approvals` OpenClaw plugin and is permitted by the active tool policy. If it is missing:
@@ -238,7 +239,7 @@ Verify each item independently:
 
 - Corip skill is discoverable and eligible.
 - The active workspace `AGENTS.md` contains exactly one current Corip standing-order block.
-- Corip MCP probe lists all six expected tools.
+- Corip MCP probe lists all nine expected tools.
 - Sabre setup card was shown; probe succeeds if enabled.
 - Vocal Bridge setup page was shown; connection is labeled accurately.
 - The `corip-approvals` plugin is loaded and `corip_approve_email_sync` is available.
@@ -275,6 +276,7 @@ Follow the live MCP schemas and `docs://mcp-usage` resource. Apply these stable 
 - Search broadly with `search_postings`, then refresh a selected result with `get_posting` before a consequential action.
 - For `tour` and `leisure`, use `place`; for `taxi`, use `departure` and `destination` instead.
 - Supply a stable, non-secret OpenClaw agent identifier as `agentId` when creating a posting.
+- Use the same `agentId` with `search_postings` when inspecting this Personal Agent's owned or joined requests.
 - When an active trip-planning request provides or implies every required field, call `create_posting` without asking for another confirmation.
 - Confirm again before `join_posting` when capacity is full; explain that this can set `needsNego`.
 - Call `join_posting` once per Personal Agent, always supplying its stable `agentId`. Duplicate calls with the same posting and agent id are idempotent.
@@ -290,6 +292,6 @@ To distribute this skill from the Corip MCP server, expose at least:
 - `docs://mcp-usage` with the live Corip tool guide.
 - `plugin://corip-approvals/bundle.json` with the hash-verifiable native approval plugin bundle described in preflight.
 - `resources/list` and `resources/read` for all resources.
-- The five Corip tools listed in preflight.
+- The nine Corip tools listed in preflight.
 
 Version the skill resource or attach an ETag/hash so clients can compare before updating. Keep setup instructions and tool schemas backward compatible, and never embed shared secrets or user-specific values in the resource.
