@@ -1,6 +1,6 @@
 # Corip Postings MCP Usage Guide
 
-This guide explains how an agent uses the Corip MCP server to search, create, join, inspect, and delete participant postings for tours, leisure activities, and shared taxis.
+This guide explains how an agent uses the Corip MCP server to search, create, join, inspect, watch, and delete participant postings for tours, leisure activities, and shared taxis.
 
 ## 1. Connection
 
@@ -15,7 +15,7 @@ openclaw mcp set corip '{"url":"https://corip-postings-kimmc3423.fly.dev/mcp","t
 openclaw mcp probe corip --json
 ```
 
-The server exposes five tools after connection.
+The server exposes six tools after connection.
 
 ### Install the Corip OpenClaw Skill
 
@@ -158,6 +158,24 @@ Delete an owned posting.
 
 Deletion is irreversible. Refresh the posting, verify ownership, and obtain explicit confirmation before calling this tool. Success returns `{ "id": ..., "deleted": true }`.
 
+### 3.6 `watch_posting`
+
+Watch one posting during an active demo. The server checks its state every three seconds and returns when something meaningful happens or the timeout expires.
+
+- `id` (string or number): required posting id
+- `lastKnownPeople` (non-negative integer): participant count returned by the most recent create, join, get, or watch call
+- `timeoutSeconds` (integer, optional): 3–120 seconds; defaults to 30
+
+Possible statuses:
+
+- `formed`: `currentPeople >= minPeople`
+- `changed`: participant count changed but the group is not formed yet
+- `waiting`: no meaningful change before timeout
+- `negotiation_required`: `needsNego` became true
+- `deleted`: the posting no longer exists
+
+Call it immediately after creating or joining. If it returns `changed` or `waiting`, call it again with the latest participant count while the interactive run remains active.
+
 ## 4. Recommended flows
 
 ### Autonomous trip planning and coordination
@@ -167,10 +185,11 @@ Deletion is irreversible. Refresh the posting, verify ownership, and obtain expl
 3. Call `search_postings` for a compatible posting before creating anything.
 4. If a compatible posting exists, refresh it with `get_posting` and join it automatically when it is within capacity and all traveler constraints are known.
 5. If no compatible posting exists, call `create_posting` as soon as all required fields are known, then count the creator's party with one `join_posting` call per participant.
-6. Record the posting id and last observed state locally. Poll it with OpenClaw Heartbeat or cron using `get_posting`.
-7. Stay silent when nothing changes. When `currentPeople >= minPeople` for the first time, each Personal Agent notifies its own traveler that the group is formed.
+6. Record the posting id and last observed state locally, then call `watch_posting` with the returned `currentPeople` value. It checks every three seconds during an active demo.
+7. Continue watching automatically on `changed` or `waiting`. When `formed` is returned, notify once and stop the interactive watcher.
+8. If the session ends before formation, continue durable monitoring with OpenClaw Heartbeat or cron using `get_posting`.
 
-The current server does not push events to agents. Use polling for the MVP. WebSocket is optional for live updates in the human-facing board UI, not required for Personal Agent coordination.
+The current server does not push events to agents. `watch_posting` is three-second long polling for the live demo; Heartbeat or cron is the durable fallback. WebSocket is optional for the human-facing board UI.
 
 ### Find a travel opportunity
 

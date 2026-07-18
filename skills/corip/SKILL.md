@@ -40,7 +40,8 @@ When the user says “plan my trip,” “find something for me to do,” or an 
 4. If a compatible posting exists, refresh it with `get_posting`. When it is within capacity and satisfies all constraints, call `join_posting` without another confirmation question and record locally that this agent joined it.
 5. If no compatible posting exists, infer or collect every required field and call `create_posting` immediately once the record is complete. Do not restate the completed record as a confirmation question. Count the creator's party with one `join_posting` call per participant and record the posting locally.
 6. Store active coordination state under `travel/corip/active-postings.json`, including posting id, role (`owner` or `participant`), joined count, last observed participant count, minimum and maximum people, and last notification state. Use this local state to prevent duplicate joins across background runs.
-7. Report what was selected and executed after the operation. Ask before acting only for the exceptions listed in the safety rules.
+7. Immediately after creating or joining, call `watch_posting` with the returned `currentPeople` as `lastKnownPeople`. During an interactive demo, continue the watch loop automatically until the group forms, negotiation is required, the posting disappears, or the session must end.
+8. Report what was selected and executed after the operation. Ask before acting only for the exceptions listed in the safety rules.
 
 ## Show workflow progress in OpenClaw
 
@@ -59,16 +60,16 @@ Skip phases that do not apply. For a blocked tool call, emit `[CORIP BLOCKED] <s
 
 ## Monitor active postings
 
-The current Corip server does not push events to Personal Agents. Monitor known posting IDs by polling `get_posting` through OpenClaw automation.
+Use two monitoring modes. The interactive watcher provides three-second feedback while the user is watching; background automation provides durable monitoring after the interactive run ends.
 
-1. Prefer Heartbeat for routine monitoring with full agent context. For a fast live demo, use one recurring cron job at a short interval such as one minute.
-2. On each run, read `travel/corip/active-postings.json` and call `get_posting` once for each active posting.
-3. If nothing changed, remain silent.
-4. If the participant count increased but remains below the minimum, update local state and continue monitoring without notifying repeatedly.
-5. When `currentPeople >= minPeople` for the first time, notify this agent's traveler that the group is formed, mark the notification as delivered, and stop frequent polling for that posting.
-6. If `needsNego` becomes true, notify the traveler that negotiation is required; never describe it as confirmed.
-7. If the posting disappears, notify the traveler once and remove it from active monitoring.
-8. Every agent that creates or joins a posting must monitor that same posting independently. This lets the owner agent and participant agents notify their own travelers without sharing private contact information.
+1. **Interactive mode:** after `create_posting` or `join_posting`, call `watch_posting` using the returned participant count. The tool checks the posting every three seconds for up to the supplied timeout.
+2. If it returns `changed`, update local state and call it again with the new count. Do not ask the user whether to continue.
+3. If it returns `waiting`, call it again while the interactive run remains active. Do not emit repetitive user messages.
+4. If it returns `formed`, notify once that the minimum group size was reached, update local state, and stop watching that posting.
+5. If it returns `negotiation_required`, notify once and stop automatic execution pending negotiation.
+6. If it returns `deleted`, notify once and remove the posting from local state.
+7. **Background mode:** when the interactive run ends before formation, use Heartbeat or the `corip-posting-monitor` cron job. Read `travel/corip/active-postings.json` and call `get_posting` once for each active posting on each run. Remain silent when nothing changed.
+8. Every agent that creates or joins a posting must monitor that posting independently so each traveler receives their own result without sharing private contact information.
 
 Use WebSocket only if the human-facing board needs live visual updates. Do not require WebSocket for Personal Agent coordination in the MVP.
 
@@ -86,6 +87,7 @@ Execute the following phases in order. Continue through all non-blocked phases a
    - `create_posting`
    - `join_posting`
    - `delete_posting`
+   - `watch_posting`
 4. Read `docs://mcp-usage` when available. Prefer the live schemas over examples in prose if they differ.
 5. Detect the user's OpenClaw agent id, workspace, IANA timezone, active delivery route, and existing Corip MCP/skill/cron entries using redacted or narrowly scoped commands.
 6. Ask one compact question only for genuinely missing setup choices.
@@ -182,7 +184,7 @@ Verify each item independently:
 
 - Corip skill is discoverable and eligible.
 - The active workspace `AGENTS.md` contains exactly one current Corip standing-order block.
-- Corip MCP probe lists all five expected tools.
+- Corip MCP probe lists all six expected tools.
 - Sabre setup card was shown; probe succeeds if enabled.
 - Vocal Bridge setup page was shown; connection is labeled accurately.
 - At most one `corip-posting-monitor` job exists, and it is enabled only while active postings require monitoring.

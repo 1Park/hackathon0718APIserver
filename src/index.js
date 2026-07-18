@@ -5,6 +5,7 @@ const { z } = require('zod');
 const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
 const { StreamableHTTPServerTransport } = require('@modelcontextprotocol/sdk/server/streamableHttp.js');
 const postings = require('./postings');
+const { watchPosting } = require('./watch-posting');
 
 const app = express();
 app.use(express.json());
@@ -15,7 +16,7 @@ const CORIP_SKILL_URI = 'skill://corip/SKILL.md';
 const LEGACY_CORIP_SKILL_URI = 'docs://corip-skill';
 
 const INSTRUCTIONS = `
-Corip connects travelers through tour, leisure, and shared-taxi postings. It exposes five tools: search_postings, get_posting, create_posting, join_posting, and delete_posting.
+Corip connects travelers through tour, leisure, and shared-taxi postings. It exposes six tools: search_postings, get_posting, create_posting, join_posting, delete_posting, and watch_posting.
 
 Core rules:
 - When a user asks for a trip plan, inspect available private trip context and immediately begin web or travel-tool research and Corip search without asking whether to proceed.
@@ -27,7 +28,7 @@ Core rules:
 - Each join_posting call adds exactly one participant. When capacity is exceeded, needsNego becomes true and remains true.
 - Only the matching owner agentId can delete a posting.
 - For travel-planning requests, use the private normalized trip and interest summaries described by the Corip skill before calling external services.
-- Personal Agents must monitor postings they create or join with scheduled get_posting calls. Notify their own traveler only when state changes or minimum participation is reached.
+- After creating or joining a posting, Personal Agents should call watch_posting with the returned currentPeople value. It checks every three seconds during the interactive demo. Notify the traveler only when state changes or minimum participation is reached.
 
 Read "skill://corip/SKILL.md" for setup, cron, travel-planning, privacy, and operating rules. Read "docs://mcp-usage" for detailed schemas, examples, and error handling.
 `.trim();
@@ -166,6 +167,21 @@ mcpServer.registerTool(
   }
 );
 
+mcpServer.registerTool(
+  'watch_posting',
+  {
+    description: 'Watch one posting every three seconds until its participant count changes, its minimum group size is reached, negotiation is required, it is deleted, or the watch times out.',
+    inputSchema: {
+      id: z.union([z.string(), z.number()]),
+      lastKnownPeople: z.number().int().nonnegative(),
+      timeoutSeconds: z.number().int().min(3).max(120).optional(),
+    },
+  },
+  async ({ id, lastKnownPeople, timeoutSeconds }) => toolResult(
+    await watchPosting(postings.getById, id, lastKnownPeople, timeoutSeconds)
+  )
+);
+
 app.post('/mcp', async (req, res) => {
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
   res.on('close', () => transport.close());
@@ -197,6 +213,19 @@ app.get('/postings/:id', (req, res) => {
     return res.status(404).json({ error: 'Posting not found' });
   }
   res.json(posting);
+});
+
+// Long-poll one posting, checking for participant changes every three seconds.
+app.get('/postings/:id/watch', async (req, res) => {
+  const lastKnownPeople = Number(req.query.lastKnownPeople);
+  const timeoutSeconds = req.query.timeoutSeconds === undefined ? 30 : Number(req.query.timeoutSeconds);
+  if (!Number.isInteger(lastKnownPeople) || lastKnownPeople < 0) {
+    return res.status(400).json({ error: 'lastKnownPeople must be a non-negative integer' });
+  }
+  if (!Number.isInteger(timeoutSeconds) || timeoutSeconds < 3 || timeoutSeconds > 120) {
+    return res.status(400).json({ error: 'timeoutSeconds must be an integer from 3 to 120' });
+  }
+  res.json(await watchPosting(postings.getById, req.params.id, lastKnownPeople, timeoutSeconds));
 });
 
 // Add one participant.
