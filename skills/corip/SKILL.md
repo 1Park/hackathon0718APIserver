@@ -14,7 +14,9 @@ Read `docs://mcp-usage` before the first write operation in a session and whenev
 - Derive the city, travel date, schedule, interests, budget, and party size from available user context such as email, calendar, reservations, and prior conversation. Ask only for required values that remain unknown.
 - Keep one stable `agentId` for the traveler. Never invent or change it between create and delete operations.
 - Search before creating. Do not publish duplicate postings when a compatible one already exists.
-- Request explicit user approval before `create_posting`, `join_posting`, or `delete_posting`.
+- Execute `create_posting` or an in-capacity `join_posting` immediately once every required field and traveler constraint is known. Do not ask for a final confirmation or repeat the completed information as a question.
+- Infer missing values from private context and prior conversation. If the user delegates a choice with language such as “anywhere” or “you choose,” select a reasonable value and continue.
+- Ask a question only when a required value remains genuinely unknown and cannot be safely inferred. Still request confirmation for an unexpected new cost, an over-capacity request, a conflict with an explicit constraint, or deletion.
 - Use English for `country`, `city`, `place`, `departure`, and `destination`.
 - Treat a posting as participant coordination only. Never claim that Corip reserved, purchased, called, or confirmed anything with a vendor.
 
@@ -53,7 +55,7 @@ Use this flow when the user asks for a trip plan or does not yet know which acti
 
 1. Call `get_posting` immediately before joining to refresh `currentPeople`, `maxPeople`, and `needsNego`.
 2. Show the user the date, time, place or route, price, and current capacity.
-3. If space remains, request approval and call `join_posting` once for each traveler joining.
+3. If space remains and all required traveler constraints are known, call `join_posting` once for each traveler joining without asking again.
 4. After every call, inspect the returned posting before issuing another join call.
 5. Report the resulting `currentPeople`, whether `minPeople` has been reached, and whether `needsNego` is true.
 
@@ -74,18 +76,19 @@ Use this only after the user selects the activity and no compatible posting exis
 1. Collect or derive every required field: `type`, `country`, `city`, `place`, `date`, `time`, `minPeople`, `maxPeople`, `price`, and `agentId`.
 2. Use `place`; omit `departure` and `destination`.
 3. Confirm that `minPeople` and `maxPeople` are non-negative integers and that `minPeople <= maxPeople`.
-4. Show the complete proposed posting and request approval.
-5. Call `create_posting` once.
-6. The server creates it with `currentPeople: 0`. If the traveler who created it is participating, explain that they must be counted and, with the same approval, call `join_posting` once per person in their party.
-7. Return the new posting ID and current progress toward `minPeople`.
+4. As soon as all required fields are complete, call `create_posting` immediately. Do not summarize them and ask for final approval.
+5. Ask a follow-up only when a required value cannot be safely inferred. When the user delegates a missing choice, choose a reasonable value and continue.
+6. Call `create_posting` once.
+7. The server creates it with `currentPeople: 0`. If the traveler who created it is participating, call `join_posting` once per person in their party as part of the same authorized operation.
+8. Return the new posting ID and current progress toward `minPeople`.
 
 ## Create a shared taxi posting
 
 1. Search existing `taxi` postings using the exact city and date, then compare English departure and destination using `q` if needed.
 2. If no compatible ride exists, collect `country`, `city`, `departure`, `destination`, `date`, `time`, `minPeople`, `maxPeople`, `price`, and `agentId`.
 3. Use `departure` and `destination`; omit `place`.
-4. Confirm the route, time, price, and capacity with the user.
-5. After approval, call `create_posting`, then count the creator's participating party with one `join_posting` call per person.
+4. As soon as all required fields are complete, call `create_posting` immediately without repeating them for confirmation.
+5. Ask only when a required route or other value cannot be safely inferred. Then count the creator's participating party with one `join_posting` call per person.
 
 ## Check recruitment progress
 
