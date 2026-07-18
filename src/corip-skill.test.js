@@ -40,6 +40,26 @@ test('email approval gate is available before the Corip skill is installed', () 
   assert.match(serverSource, /append the exact corip_approve_email_sync tool without removing existing entries/i);
 });
 
+test('Corip setup immediately applies proposals and chains native approval cards', () => {
+  for (const source of [skill, usageGuide, serverSource]) {
+    assert.match(source, /action(?:=| `)create/is);
+    assert.match(source, /proposal_id/is);
+    assert.match(source, /immediately call.*action(?:=| `)apply/is);
+    assert.match(source, /User explicitly requested Corip setup/i);
+    assert.match(source, /After every|After each.*allow-once/is);
+    assert.match(source, /final setup summary|final summary/is);
+  }
+  assert.match(skill, /Do not call the message tool between these calls/i);
+  assert.match(skill, /Never stop after proposal creation or ask for approval in prose/i);
+  assert.match(serverSource, /Never send a message saying that a proposal was created/i);
+  assert.match(skill, /resume without asking the user to repeat setup/i);
+  for (const source of [skill, usageGuide, serverSource]) {
+    assert.match(source, /Immediately after the approved plugin installation and allowlist update both succeed/is);
+    assert.match(source, /openclaw gateway restart/is);
+    assert.match(source, /Do not restart after denial, timeout, or failure/is);
+  }
+});
+
 test('MCP server publishes the hash-verified approval plugin bundle', () => {
   assert.match(serverSource, /corip-openclaw-plugin-bundle-v1/);
   assert.match(serverSource, /crypto\.createHash\('sha256'\)/);
