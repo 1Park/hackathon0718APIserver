@@ -520,8 +520,7 @@ The agent can:
 
 * Continue recruiting through Corip
 * Search for an existing public group
-* Find a smaller-group alternative
-* Ask the operator whether two participants may join another scheduled tour`,
+* Find a smaller-group alternative`,
     approval: {
       title: 'Confirm shared Uber',
       body: `Shared Uber to La Jolla
@@ -533,7 +532,9 @@ The group is full: **4 / 4 participants**
 Current estimated share: **$13.50–15.50**
 Maximum authorized charge: **$15.50**
 
-No charge will be made unless you confirm.`,
+By confirming, you also allow one AI-disclosed outbound call to the La Jolla Kayak operator. The call may seek a morning merged departure up to $85 per person, but it may not make a payment.
+
+No ride charge or phone call will occur unless you confirm.`,
       buttons: [
         { label: 'Not Now', value: 'corip_demo:not_now_uber' },
         { label: 'Confirm up to $15.50', value: 'corip_demo:confirm_uber_15_50', style: 'success' },
@@ -557,54 +558,15 @@ The four-person group is complete and the ride has been reserved.
 * Hilton San Diego Bayfront → La Jolla Shores
 * Four participants
 * Your final share will not exceed **$15.50**`,
-    approval: {
-      title: 'Allow outbound calls?',
-      body: `The agent will make up to two calls.
-
-### Call 1: La Jolla kayak operator
-
-**Objective**
-Find a way for the three-person group to participate.
-
-**Allowed conditions**
-* Maximum acceptable price: $85 per person
-* Keep a morning departure
-* Joining another group is allowed
-* Do not make a payment during the call
-
-### Call 2: Balboa Park tour operator
-
-**Objective**
-Find an alternative for the two registered participants.
-
-**Allowed conditions**
-* Maximum acceptable price: $55 per person
-* Keep an afternoon departure
-* Joining an existing public group is allowed
-* Do not make a payment during the call
-
-For both calls:
-* Maximum call duration: 3 minutes each
-* Disclose that the caller is an AI agent`,
-      buttons: [
-        { label: 'Deny', value: 'corip_demo:deny_calls', style: 'danger' },
-        { label: 'Edit Limits', value: 'corip_demo:edit_limits' },
-        { label: 'Allow Calls', value: 'corip_demo:allow_calls', style: 'success' },
-      ],
-      next: { 'corip_demo:allow_calls': 'complete_operator_calls' },
-    },
   },
 
   operatorCalls: {
     scene: '5.3',
-    working: 'I’m contacting both operators to find options that fit the approved schedule and price limits.',
+    working: 'I’m contacting the Kayak operator to find an option that fits the approved schedule and price limit.',
     simulatedToolTrace: [
       { tool: 'VocalBridge.startCall', input: { recipient: 'La Jolla kayak operator', objective: 'Find an option for a three-person group', constraints: ['Maximum $85 per person', 'Morning departure', 'Joining another group is allowed', 'No payment authorization', 'Disclose AI agent identity'] }, result: 'Call connected.' },
       { tool: 'VocalBridge.liveCallStatus', result: 'The operator has another public departure with one open space for the Corip group.' },
       { tool: 'VocalBridge.endCall', result: 'Call completed.\nTotal duration: 1 minute 48 seconds.' },
-      { tool: 'VocalBridge.startCall', input: { recipient: 'Balboa Park tour operator', objective: 'Find an alternative for two participants', constraints: ['Maximum $55 per person', 'Afternoon departure', 'Joining an existing group is allowed', 'No payment authorization', 'Disclose AI agent identity'] }, result: 'Call connected.' },
-      { tool: 'VocalBridge.liveCallStatus', result: 'No existing group is available at 2:30 PM. The operator offered a later public tour at a higher price.' },
-      { tool: 'VocalBridge.endCall', result: 'Call completed.\nTotal duration: 2 minutes 6 seconds.' },
     ],
     persistentMessage: `## Call results
 
@@ -620,20 +582,13 @@ The operator can merge your three-person Corip group into another public departu
 * Free cancellation up to 24 hours before departure
 * Reservation required by 6:00 PM today
 
-### Balboa Park: no suitable group was found
+### Balboa Park: no call was placed
 
 The original activity has only two of six required participants.
 
-The operator offered:
+Its availability assessment remains scripted, and no VocalBridge request was made for this activity.
 
-* A public tour at 4:30 PM
-* Price: $64 per person
-* Different route
-* Nonrefundable booking
-
-This option exceeds your approved $55 limit, so I did not proceed.
-
-No payments were made during either call.`,
+No payments were made during the Kayak call.`,
     approval: {
       title: 'Confirm kayak tour',
       body: `La Jolla Sea Caves Kayak Tour
@@ -737,16 +692,30 @@ No reservation was made and no payment was charged.
 * ✅ Called the kayak operator through VocalBridge
 * ✅ Merged the three-person kayak group into another public departure
 * ✅ Completed the kayak reservation
-* ✅ Called the Balboa Park operator through VocalBridge
-* ✅ Rejected an alternative that exceeded the approved price
 * ✅ Canceled the underfilled Balboa Park activity without charge
 * ✅ Received confirmation emails for all completed reservations`,
   },
 };
 
+function buildUberConfirmationAndKayakCallScene() {
+  return {
+    scene: '5.2-5.3',
+    simulatedToolTrace: [
+      ...SCENES.confirmUber.simulatedToolTrace,
+      ...SCENES.operatorCalls.simulatedToolTrace,
+    ],
+    persistentMessages: [
+      SCENES.confirmUber.persistentMessage,
+      SCENES.operatorCalls.persistentMessage,
+    ],
+    approval: SCENES.operatorCalls.approval,
+  };
+}
+
 module.exports = {
   FULL_SCRIPT: fs.readFileSync(FULL_SCRIPT_PATH, 'utf8'),
   SCENES,
   buildTelegramDelivery,
+  buildUberConfirmationAndKayakCallScene,
   readSkill,
 };

@@ -19,7 +19,7 @@ const INSTRUCTIONS = `
 Corip is running in hybrid demo mode for the complete July 24-26 San Diego itinerary, Scenes 1 through 6.
 
 Mandatory behavior:
-- Keep all Corip, GET/research/account/payment/calendar results staged. The only live effects are the two approved VocalBridge calls made directly by this server to https://extent-prospective-ext-condition.trycloudflare.com/mcp.
+- Keep all Corip, GET/research/account/payment/calendar results staged. The only live effect is the approved Kayak VocalBridge call made directly by this server to https://extent-prospective-ext-condition.trycloudflare.com/mcp.
 - Use only the Corip demo tools exposed by this server for Scenes 1 through 6.
 - Treat every tool result as the authoritative script. Render its persistent message verbatim except for harmless channel formatting.
 - When a result contains an approval object, send one persistent interactive message with the supplied title, body, and buttons. On Telegram use semantic presentation buttons or inline buttons. Do not replace buttons with a prose question when buttons are available.
@@ -50,13 +50,6 @@ function result(value) {
   };
 }
 
-function liveResult(value) {
-  return {
-    content: [{ type: 'text', text: JSON.stringify(value) }],
-    structuredContent: value,
-  };
-}
-
 mcpServer.registerResource(
   'corip-demo-script',
   'demo://corip/script',
@@ -81,15 +74,6 @@ mcpServer.registerResource(
   async (uri) => ({
     contents: [{ uri: uri.href, mimeType: 'text/markdown', text: demo.readSkill() }],
   })
-);
-
-mcpServer.registerTool(
-  'run_live_operator_calls',
-  {
-    description: 'After Allow Calls only, connect directly to the fixed VocalBridge MCP URL and make the two approved negotiation calls with all seven required activity fields.',
-    inputSchema: { decision: z.literal('allow_calls') },
-  },
-  async () => liveResult(await liveVocalBridge.runOperatorCalls())
 );
 
 mcpServer.registerTool(
@@ -194,19 +178,25 @@ mcpServer.registerTool(
 mcpServer.registerTool(
   'confirm_shared_uber',
   {
-    description: 'After Confirm up to $15.50, simulate the final human-approved shared-Uber reservation and payment authorization, then return the outbound-call approval card.',
+    description: 'After Confirm up to $15.50, simulate the shared-Uber reservation, make the one bundled and approved real Kayak VocalBridge call, then return the combined results and Kayak final-confirmation card. Never call Corip or Balboa.',
     inputSchema: { amount: z.literal(15.5) },
   },
-  async () => result(demo.SCENES.confirmUber)
+  async () => {
+    await liveVocalBridge.runOperatorCalls();
+    return result(demo.buildUberConfirmationAndKayakCallScene());
+  }
 );
 
 mcpServer.registerTool(
   'complete_operator_calls',
   {
-    description: 'Scene 5.3: after the direct live VocalBridge wrapper succeeds, return the canonical call results plus the kayak confirmation card.',
+    description: 'Backward-compatible handler for an already displayed Allow Call card: make the one real Kayak VocalBridge call and return the canonical Kayak result plus final-confirmation card.',
     inputSchema: { decision: z.literal('allow_calls') },
   },
-  async () => result(demo.SCENES.operatorCalls)
+  async () => {
+    await liveVocalBridge.runOperatorCalls();
+    return result(demo.SCENES.operatorCalls);
+  }
 );
 
 mcpServer.registerTool(

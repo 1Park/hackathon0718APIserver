@@ -16,7 +16,7 @@ This reference fixes all facts and transitions for the recorded demo. Do not imp
 - User messages are typed, spoken, or submitted through buttons.
 - Persistent agent messages remain visible in Telegram.
 - Working panels are temporary and contain only high-level Thinking, Tool, and Result entries; never expose private chain-of-thought.
-- Before each meaningful tool group, emit one short high-level commentary sentence and continue immediately into the tool call. Telegram native progress streaming shows these updates temporarily. Never use `message.send` for progress or dump the full Thinking/Tool/Result trace at once. For `Allow Calls`, emit a brief `Contacting the kayak operator…` update before `run_live_operator_calls`; use `message.send` only after all calls and scene work finish.
+- Before each meaningful tool group, emit one short high-level commentary sentence and continue immediately into the tool call. Telegram native progress streaming shows these updates temporarily. Never use `message.send` for progress or dump the full Thinking/Tool/Result trace at once. Before bundled Uber confirmation/Kayak calling, emit a brief `Confirming the ride and contacting the kayak operator…` update, then call `confirm_shared_uber`; use `message.send` only after that tool returns the combined result.
 - Approval bubbles are persistent and appear before account access, payments, reservations, publishing, or phone calls.
 - Send each scene's persistent content and its next approval card atomically as one Telegram message. On click, edit that message to append the chosen label and remove its inline keyboard before continuing.
 
@@ -119,12 +119,12 @@ Call only `get_participant_status` for the follow-up. All participant counts are
 - Kayak: 3/4, one participant short, deadline approaching, not booked.
 - Balboa Park: 2/6, four short, deadline approaching, unlikely to reach minimum.
 
-Because the shared Uber reached 4/4, first show a final human confirmation/payment card with `Not Now` and `Confirm up to $15.50`. Reaching capacity does not authorize automatic reservation or payment. On confirmation, call `confirm_shared_uber(amount=15.5)`, simulate the ride reservation and a payment authorization capped at $15.50, and then show the outbound-call card. That card permits at most two real calls, three minutes each, with AI disclosure and no payment. Kayak ceiling is $85 with a morning departure; Balboa ceiling is $55 with an afternoon departure.
+After Scene 4, treat `Go ahead with La Jolla Kayak negotiation`, `phone call to kayak tour`, `go ahead with Uber confirm`, `confirmed?`, or equivalent continuation language as an immediate request for `get_participant_status`; never answer that negotiation is unavailable. Because the shared Uber reached 4/4, show a bundled approval card with `Not Now` and `Confirm up to $15.50`. Its body must state that confirmation authorizes the staged Uber reservation/payment and exactly one real Kayak call, up to three minutes, with AI disclosure, no payment during the call, a morning departure, and an $85 ceiling. Balboa must not trigger VocalBridge.
 
-On `Allow Calls`, call `run_live_operator_calls(decision="allow_calls")`; it makes the two real calls directly to the fixed VocalBridge MCP URL with the seven fields specified in `SKILL.md`. Then call `complete_operator_calls(decision="allow_calls")`. Do not confirm the live Kayak posting yet.
+On `Confirm up to $15.50`, call only `confirm_shared_uber(amount=15.5)`. Inside that single tool invocation, simulate the Uber reservation, make exactly one real Kayak call directly to the fixed VocalBridge MCP URL, and return the Uber confirmation plus Kayak call result and `Confirm $72.00` card. No second approval card or user message is required. Never call VocalBridge for Balboa. If a stale pre-change `Allow Call` button is clicked, route it to `complete_operator_calls(decision="allow_calls")`, which makes the same single Kayak call once.
 
 - Simulated kayak call duration: 1:48. Result: three-person group can join a public July 25 9:30 AM departure for $72 each, free cancellation through 24 hours prior, reserve by 6:00 PM today.
-- Simulated Balboa call duration: 2:06. Result: only a 4:30 PM different-route, nonrefundable tour for $64. Reject it because it exceeds $55.
+- Balboa remains fully scripted, and no operator call is placed.
 - No payment during calls.
 
 Show the kayak card with `Decline` and `Confirm $72.00`.

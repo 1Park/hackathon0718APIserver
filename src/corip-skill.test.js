@@ -8,9 +8,8 @@ const skill = fs.readFileSync(path.join(__dirname, '..', 'skills', 'corip', 'SKI
 const agents = fs.readFileSync(path.join(__dirname, '..', 'AGENTS.md'), 'utf8');
 const server = fs.readFileSync(path.join(__dirname, 'index.js'), 'utf8');
 
-test('demo MCP exposes sixteen staged scene tools and one live VocalBridge wrapper', () => {
+test('demo MCP exposes staged scenes and bundled Kayak-call handlers', () => {
   const expected = [
-    'run_live_operator_calls',
     'begin_initial_setup',
     'connect_corip',
     'enable_travel_email_workflow',
@@ -51,7 +50,6 @@ test('scene facts match the replacement script', () => {
     '$15.50',
     '9:30 AM',
     '1 minute 48 seconds',
-    '2 minutes 6 seconds',
   ]) assert.match(all, new RegExp(fact.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 });
 
@@ -64,7 +62,6 @@ test('approval transitions and button labels are exact', () => {
   assert.deepEqual(demo.SCENES.findHotel.approval.buttons.map((b) => b.label), ['Not Now', 'Review Alternatives', 'Confirm $438.16']);
   assert.deepEqual(demo.SCENES.saturdayCandidates.approval.buttons.map((b) => b.label), ['Cancel', 'Edit Selection', 'Continue']);
   assert.deepEqual(demo.SCENES.participantStatus.approval.buttons.map((b) => b.label), ['Not Now', 'Confirm up to $15.50']);
-  assert.deepEqual(demo.SCENES.confirmUber.approval.buttons.map((b) => b.label), ['Deny', 'Edit Limits', 'Allow Calls']);
   assert.deepEqual(demo.SCENES.operatorCalls.approval.buttons.map((b) => b.label), ['Decline', 'Confirm $72.00']);
   assert.deepEqual(demo.SCENES.confirmKayak.approval.buttons.map((b) => b.label), ['Keep Recruiting', 'Search Alternatives', 'Cancel Activity']);
   assert.equal(demo.SCENES.confirmHotel.continueImmediately.tool, 'get_saturday_candidates');
@@ -84,6 +81,12 @@ test('Telegram deliveries are atomic and keep the next approval in the same mess
   const hotel = demo.buildTelegramDelivery(demo.SCENES.findHotel);
   assert.doesNotMatch(hotel.message, /I found an urgent issue/);
   assert.match(hotel.message, /Rebook canceled hotel/);
+
+  const bundled = demo.buildTelegramDelivery(demo.buildUberConfirmationAndKayakCallScene());
+  assert.match(bundled.message, /Shared Uber confirmed/);
+  assert.match(bundled.message, /Kayak: a solution was found/);
+  assert.match(bundled.message, /Confirm kayak tour/);
+  assert.deepEqual(bundled.presentation.blocks.at(-1).buttons.map((button) => button.label), ['Decline', 'Confirm $72.00']);
 });
 
 test('skill and standing order restrict live effects and enforce buttons', () => {
@@ -107,12 +110,13 @@ test('skill and standing order restrict live effects and enforce buttons', () =>
 });
 
 test('demo stages every Corip effect and declares only the live VocalBridge contract', () => {
-  assert.match(skill, /run_live_operator_calls\(decision="allow_calls"\)/);
   assert.match(skill, /confirm_shared_uber\(amount=15\.5\)/);
   assert.match(skill, /Confirm \$72\.00[\s\S]*confirm_kayak_tour/);
   assert.match(skill, /Reaching the required participant count[\s\S]*never automatic reservation or payment/);
   assert.match(skill, /All Corip searches[\s\S]*script fixtures/);
-  assert.doesNotMatch(skill, /sync_live_demo_postings|confirm_live_kayak_posting|cancel_live_balboa_posting/);
+  assert.doesNotMatch(skill, /sync_live_demo_postings|confirm_live_kayak_posting|cancel_live_balboa_posting|run_live_operator_calls/);
+  assert.match(skill, /never refuse[\s\S]*Kayak negotiation/i);
+  assert.match(skill, /one real Kayak call/i);
   for (const field of [
     'country',
     'city',
@@ -140,5 +144,7 @@ test('VocalBridge wrapper calls the fixed MCP directly with all required fields'
   ]) assert.match(vocal, new RegExp(field));
   const calls = require('./live-vocalbridge').CALLS;
   assert.equal(calls.kayak.current_participants, 3);
-  assert.equal(calls.balboa.current_participants, 2);
+  assert.equal(calls.balboa, undefined);
+  assert.equal((vocal.match(/name: 'negotiate_reservation'/g) || []).length, 1);
+  assert.doesNotMatch(vocal, /Balboa|balboa/);
 });

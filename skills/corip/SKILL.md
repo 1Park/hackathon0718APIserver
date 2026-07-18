@@ -1,6 +1,6 @@
 ---
 name: corip
-description: Run the complete Corip Personal Agent Telegram demo for Scenes 1 through 6, using scripted Corip/GET/account/booking results while performing only approved VocalBridge negotiation calls. Use for the supplied Corip setup URL, Plan a trip for this weekend, any demo button callback, or any Scene 1-6 request during the recorded demo.
+description: Run the complete Corip Personal Agent Telegram demo for Scenes 1 through 6, using scripted Corip/GET/account/booking results while performing only one approved Kayak VocalBridge negotiation call. Use for the supplied Corip setup URL, Plan a trip for this weekend, any demo button callback, or any Scene 1-6 request during the recorded demo.
 ---
 
 # Corip hybrid demo
@@ -9,7 +9,7 @@ Run a deterministic presentation with one narrowly scoped live effect: approved 
 
 ## Non-negotiable demo rules
 
-1. Use `corip` for staged scene output and its `run_live_operator_calls` wrapper, which connects directly to the fixed VocalBridge MCP URL. Never call a real Corip server or perform Corip create/join/search/confirm/delete operations. Do not directly orchestrate a separate `vocalbridge` namespace. Do not browse, inspect Gmail, charge money, alter a real calendar, create real cron jobs, open OAuth pages, or call PayPal, Sabre, Viator, or any other live connector.
+1. Use `corip` for staged scene output. The `confirm_shared_uber` tool contains the single approved Kayak VocalBridge call and connects directly to the fixed VocalBridge MCP URL. Never call a real Corip server or perform Corip create/join/search/confirm/delete operations. Do not directly orchestrate a separate `vocalbridge` namespace. Do not browse, inspect Gmail, charge money, alter a real calendar, create real cron jobs, open OAuth pages, or call PayPal, Sabre, Viator, or any other live connector.
 2. Before every meaningful tool group, emit one brief assistant commentary update of one sentence and at most 100 characters, such as `Checking your confirmed reservations…`. This is a non-terminal progress update: the very next action must be the mapped MCP tool call, never a final response or `NO_REPLY`.
 3. Never use the `message` tool for Thinking, Working, status, or tool-progress output. Native Telegram progress streaming renders commentary and tool calls in a temporary preview while the same agent turn continues. Do not emit `⏳ Working…`, headings, a list of future tools, simulated results, or a large prewritten Thinking block.
 4. Use `message.send` exactly once only after the scene action, approved live wrappers, and immediate continuations all finish. Send the response's complete `telegramDelivery.message` and `telegramDelivery.presentation`, including all persistent text and the next approval buttons. Return `NO_REPLY` only after this final send succeeds.
@@ -37,14 +37,16 @@ Use this exact state transition table:
 | `corip_demo:confirm_438_16` or `Confirm $438.16` | `confirm_hotel_rebooking(amount=438.16)`, then immediately `get_saturday_candidates` | Hotel confirmation, then Scene 3 candidates and Select activities buttons in the same turn |
 | Research Saturday activities; start Scene 3 | `get_saturday_candidates` | Candidate message, then Select activities buttons |
 | `corip_demo:continue` or `Continue` | `register_saturday_plan(selection="all")` | Scripted registered plan and reservation status |
-| Two days later; check participants; continue Scene 5 | `get_participant_status` | Scripted attention message, then shared-Uber final confirm/pay buttons |
-| `corip_demo:confirm_uber_15_50` or `Confirm up to $15.50` | `confirm_shared_uber(amount=15.5)` | Human-approved Uber reservation/payment trace, confirmation, then outbound-call buttons |
-| `corip_demo:allow_calls` or `Allow Calls` | `run_live_operator_calls(decision="allow_calls")`, then `complete_operator_calls(decision="allow_calls")` | Two direct real calls, then call results and Kayak final confirm/pay buttons |
+| Two days later; participant follow-up; `Go ahead with La Jolla Kayak negotiation`; `phone call to kayak tour`; `go ahead with Uber confirm`; `confirmed?` after Scene 4 | `get_participant_status` | Scripted attention message, then bundled Uber-confirm/Kayak-call approval buttons |
+| `corip_demo:confirm_uber_15_50` or `Confirm up to $15.50` | `confirm_shared_uber(amount=15.5)` | In one tool: staged Uber confirmation, one real Kayak call, combined results, then Kayak final confirm/pay buttons |
+| `corip_demo:allow_calls` or `Allow Call` from an already displayed legacy card | `complete_operator_calls(decision="allow_calls")` | Backward-compatible one real Kayak call, then Kayak final confirm/pay buttons |
 | `corip_demo:confirm_72` or `Confirm $72.00` | `confirm_kayak_tour(amount=72)` | Human-approved staged confirmation/payment, then Balboa Park decision buttons |
 | `corip_demo:cancel_balboa` or `Cancel Activity` | `cancel_balboa_activity(decision="cancel_activity")` | Scripted cancellation trace and message |
 | Final trip summary; Scene 6 | `get_final_trip_summary` | Exact Saturday section and completed-actions list |
 
 Use callback values instead of ambiguous labels whenever possible. The two `Open Setup Page` labels route according to the current scene; the Scene 2 `Allow Once` routes to the balance check, not the earlier Corip or Gmail choice.
+
+After Scene 4, never refuse a request for Kayak negotiation, a Kayak phone call, participant follow-up, or Uber confirmation on the grounds that it is “not yet” available. Those intents explicitly advance to `get_participant_status` and the bundled approval card.
 
 For `Not Now`, `Cancel`, `Edit Selection`, `Deny`, `Edit Limits`, `Decline`, `Keep Recruiting`, `Search Alternatives`, or any unimplemented alternate branch, acknowledge the selection briefly and stop. Do not invent a branch.
 
@@ -58,12 +60,11 @@ All Corip searches, participant counts, joins, creates, confirmations, cancellat
 
 ## Live VocalBridge calls
 
-After `Allow Calls`, call `run_live_operator_calls(decision="allow_calls")`. This local wrapper connects directly to `https://extent-prospective-ext-condition.trycloudflare.com/mcp` and invokes `negotiate_reservation` twice with all seven required fields exactly:
+The `Confirm up to $15.50` card explicitly authorizes both the staged Uber reservation/payment and one Kayak operator call. After that callback, call only `confirm_shared_uber(amount=15.5)`. That tool connects directly to `https://extent-prospective-ext-condition.trycloudflare.com/mcp`, invokes `negotiate_reservation` exactly once for Kayak, and returns the combined Uber confirmation, scripted Kayak result, and `Confirm $72.00` card in one response. Do not wait for another user message and do not show a second call-approval card.
 
-1. Kayak: country `United States`; city `San Diego`; location `La Jolla Shores`; activity_date `2026-07-25 09:00`; min_participants `4`; current_participants `3`; provider_phone `+1-619-555-0147`.
-2. Balboa: country `United States`; city `San Diego`; location `Balboa Park Visitors Center`; activity_date `2026-07-25 14:30`; min_participants `6`; current_participants `2`; provider_phone `+1-619-555-0182`.
+Kayak: country `United States`; city `San Diego`; location `La Jolla Shores`; activity_date `2026-07-25 09:00`; min_participants `4`; current_participants `3`; provider_phone `+1-619-555-0147`.
 
-The current VocalBridge server deliberately dials its fixed demo override number; `provider_phone` is required activity context. Do not separately call a `vocalbridge` namespace: the wrapper owns the direct connection and both calls. Display the canonical scripted call results regardless of returned wording, but report a real call failure instead of falsely claiming completion.
+Never call VocalBridge for Balboa. Its participant status, alternative availability, and cancellation path remain scripted. The current VocalBridge server deliberately dials its fixed demo override number; `provider_phone` is required activity context. Do not separately call a `vocalbridge` namespace: `confirm_shared_uber` owns the direct Kayak call. Display the canonical scripted Kayak result regardless of returned wording, but report a real call failure instead of falsely claiming completion.
 
 ## Persistent button cards
 
@@ -81,4 +82,4 @@ Never omit `message`; Telegram rejects presentation-only sends. Record the retur
 
 ## Demo truth boundary
 
-HTTP setup, Corip, Skills, Cron, Memory, Calendar, PayPal, Sabre, Viator, Gmail, OAuth, reservation, payment, and notification results are staged fixtures. Only VocalBridge negotiation calls are real. Never broaden live effects beyond VocalBridge. If asked whether an action was real, describe this boundary honestly.
+HTTP setup, Corip, Skills, Cron, Memory, Calendar, PayPal, Sabre, Viator, Gmail, OAuth, reservation, payment, and notification results are staged fixtures. Only the Kayak VocalBridge negotiation call is real. Never broaden live effects beyond that one call. If asked whether an action was real, describe this boundary honestly.

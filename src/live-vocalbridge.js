@@ -14,15 +14,6 @@ const CALLS = {
     current_participants: 3,
     provider_phone: '+1-619-555-0147',
   },
-  balboa: {
-    country: 'United States',
-    city: 'San Diego',
-    location: 'Balboa Park Visitors Center',
-    activity_date: '2026-07-25 14:30',
-    min_participants: 6,
-    current_participants: 2,
-    provider_phone: '+1-619-555-0182',
-  },
 };
 
 function parseToolResult(result) {
@@ -46,11 +37,7 @@ async function runOperatorCalls() {
       name: 'negotiate_reservation',
       arguments: CALLS.kayak,
     }, undefined, requestOptions));
-    const balboa = parseToolResult(await client.callTool({
-      name: 'negotiate_reservation',
-      arguments: CALLS.balboa,
-    }, undefined, requestOptions));
-    return { endpoint: VOCALBRIDGE_URL, kayak, balboa };
+    return { endpoint: VOCALBRIDGE_URL, kayak };
   } finally {
     await client.close();
   }
