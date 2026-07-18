@@ -202,7 +202,7 @@ If no delivery route is resolvable, use `--no-deliver` and report where results 
 
 ### 9. Create the posting monitor
 
-Create one stable monitoring job named `corip-posting-monitor` when `travel/corip/active-postings.json` contains at least one active posting. Use Heartbeat instead when reliable heartbeat monitoring is already enabled. For a live demo, use a one-minute recurring cron schedule; for normal use, prefer a less frequent interval.
+Create one stable monitoring job named `corip-posting-monitor` when `travel/corip/active-postings.json` contains at least one active posting. Use Heartbeat instead when reliable heartbeat monitoring is already enabled. When cron is used, run it every minute with `*/1 * * * *` in the detected IANA timezone.
 
 Use this monitoring message:
 
@@ -210,7 +210,7 @@ Use this monitoring message:
 Monitor Corip active postings. Read travel/corip/active-postings.json. For each active posting id, call get_posting and compare currentPeople, minPeople, maxPeople, and needsNego with the stored state. Never call join_posting from this monitoring job unless the local record explicitly shows that this agent has not yet joined and the original trip-planning authorization and all constraints are still valid. If nothing changed, reply exactly NO_REPLY. If the minimum is reached for the first time, notify this traveler that the group is formed, mark that notification locally, and stop frequent polling for that posting. If needsNego becomes true or the posting disappears, notify once and update local state. Never duplicate a join or notification.
 ```
 
-Example for a live demo:
+Create or update the cron with this one-minute schedule:
 
 ```bash
 openclaw cron create "*/1 * * * *" "<monitoring-message-above>" --name "corip-posting-monitor" --tz "<IANA_TIMEZONE>" --session isolated --light-context --announce
