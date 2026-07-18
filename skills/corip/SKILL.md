@@ -1,6 +1,6 @@
 ---
 name: corip
-description: Set up and operate a portable Corip travel workflow in OpenClaw. Use when a user asks to set up Corip from its MCP URL, connect the Corip or Sabre MCP servers, configure travel-email ingestion and interest analysis, create the Corip cron workflow, open the Vocal Bridge setup experience, build a travel plan from accumulated trip and interest summaries, or use Corip to search, create, join, and manage tour, leisure, or taxi postings.
+description: Set up and operate a portable, autonomous Corip travel workflow in OpenClaw. Use when a user asks to plan a trip, find activities or rides, coordinate with other travelers, monitor group formation, set up Corip from its MCP URL, connect Corip or Sabre, configure travel-email ingestion, create Corip background monitoring, open Vocal Bridge setup, or search, create, join, and manage tour, leisure, or taxi postings.
 ---
 
 # Corip
@@ -22,9 +22,36 @@ Accept a different Corip endpoint only when the user explicitly supplies it. Req
 2. Never ask the user to paste API keys, OAuth tokens, email passwords, or mailbox contents into chat. Use the provider's local OAuth flow, OpenClaw SecretRefs, or environment-variable references.
 3. Never read or print an entire `openclaw.json`, `.env`, credential store, or auth profile. Use scoped OpenClaw CLI commands that redact secrets and preserve unrelated configuration.
 4. Never send raw email bodies, passenger data, confirmation numbers, or payment details to the public Corip MCP. Send only the minimum non-sensitive posting search fields required by a user-approved action.
-5. Do not create or join a posting, book travel, send email, delete data, or publish inferred interests without explicit confirmation for that action. The setup request alone does not authorize these consequential actions.
+5. Treat a direct trip-planning or coordination request as standing authorization to research, search Corip, join an in-capacity compatible posting, or create a posting when all required values and traveler constraints are known. Do not pause for routine confirmation. Still require confirmation for deletion, unexpected new cost, over-capacity negotiation, booking, payment, sending email, or an action that conflicts with an explicit constraint.
 6. Treat email-derived interests as tentative travel preferences, not facts. Do not infer health, religion, ethnicity, politics, sexuality, finances, or other sensitive traits. Record evidence dates and confidence, and make the profile inspectable and deletable.
 7. Preserve existing configuration. Create a backup before any direct file edit; prefer `openclaw mcp`, `openclaw config`, `openclaw cron`, and `openclaw skills` commands instead.
+
+## Autonomous trip planning and coordination
+
+When the user says “plan my trip,” “find something for me to do,” or an equivalent request, complete the routine workflow without asking whether to proceed at each stage.
+
+1. Read available private context such as travel email, calendar, flight and lodging reservations, location, prior preferences, budget, party size, and free time. Ask only when a required value cannot be inferred safely.
+2. Start web or travel-tool research immediately. Internally compare a small set of viable options and select the strongest option from the traveler's known interests and constraints. Do not make the user choose unless there is a material unresolved tradeoff.
+3. Before creating anything, call `search_postings` for a compatible `tour`, `leisure`, or `taxi` posting. Send only the minimum non-sensitive destination, date, type, place, or route fields.
+4. If a compatible posting exists, refresh it with `get_posting`. When it is within capacity and satisfies all constraints, call `join_posting` without another confirmation question and record locally that this agent joined it.
+5. If no compatible posting exists, infer or collect every required field and call `create_posting` immediately once the record is complete. Do not restate the completed record as a confirmation question. Count the creator's party with one `join_posting` call per participant and record the posting locally.
+6. Store active coordination state under `travel/corip/active-postings.json`, including posting id, role (`owner` or `participant`), joined count, last observed participant count, minimum and maximum people, and last notification state. Use this local state to prevent duplicate joins across background runs.
+7. Report what was selected and executed after the operation. Ask before acting only for the exceptions listed in the safety rules.
+
+## Monitor active postings
+
+The current Corip server does not push events to Personal Agents. Monitor known posting IDs by polling `get_posting` through OpenClaw automation.
+
+1. Prefer Heartbeat for routine monitoring with full agent context. For a fast live demo, use one recurring cron job at a short interval such as one minute.
+2. On each run, read `travel/corip/active-postings.json` and call `get_posting` once for each active posting.
+3. If nothing changed, remain silent.
+4. If the participant count increased but remains below the minimum, update local state and continue monitoring without notifying repeatedly.
+5. When `currentPeople >= minPeople` for the first time, notify this agent's traveler that the group is formed, mark the notification as delivered, and stop frequent polling for that posting.
+6. If `needsNego` becomes true, notify the traveler that negotiation is required; never describe it as confirmed.
+7. If the posting disappears, notify the traveler once and remove it from active monitoring.
+8. Every agent that creates or joins a posting must monitor that same posting independently. This lets the owner agent and participant agents notify their own travelers without sharing private contact information.
+
+Use WebSocket only if the human-facing board needs live visual updates. Do not require WebSocket for Personal Agent coordination in the MVP.
 
 ## Setup workflow
 
@@ -119,7 +146,7 @@ Keep the job disabled until all three readiness conditions hold: durable email-p
 Use this cron message verbatim unless local tool names require a minimal adaptation:
 
 ```text
-Run the Corip travel-email workflow. Read only new travel-related email since travel/corip/checkpoint.json using the configured read-only email connector. Do not print raw message bodies. Extract or update private trip documents under travel/corip/plans/ with source message ids, dates, destinations, travel dates, transport, lodging, activities, reservation status, and unresolved questions. Update travel/corip/interests.md only with non-sensitive travel preferences supported by dated evidence and include confidence. Never send raw email or personal identifiers to Corip. Use Corip search_postings only with minimal destination/date/type fields when a documented trip makes a relevant match useful. Use Sabre only if configured and needed; never book. Never create, join, or delete a Corip posting without fresh user confirmation. Advance checkpoint.json only after all writes for a message succeed. If nothing changed, reply exactly NO_REPLY; otherwise summarize changed plans, tentative interests, relevant Corip matches, and any action required.
+Run the Corip travel-email workflow. Read only new travel-related email since travel/corip/checkpoint.json using the configured read-only email connector. Do not print raw message bodies. Extract or update private trip documents under travel/corip/plans/ with source message ids, dates, destinations, travel dates, transport, lodging, activities, reservation status, and unresolved questions. Update travel/corip/interests.md only with non-sensitive travel preferences supported by dated evidence and include confidence. Never send raw email or personal identifiers to Corip. Use Corip search_postings only with minimal destination/date/type fields when a documented trip makes a relevant match useful. Use Sabre only if configured and needed; never book. Create or join automatically only when the relevant trip document records an active user trip-planning request and all required constraints; otherwise report the opportunity without acting. Never delete automatically. Advance checkpoint.json only after all writes for a message succeed. If nothing changed, reply exactly NO_REPLY; otherwise summarize changed plans, tentative interests, relevant Corip matches, and any action required.
 ```
 
 Create or update the job with the supported CLI syntax for the installed OpenClaw version. A current CLI example is:
@@ -132,6 +159,20 @@ Resolve the job id from the create/update result or a fresh exact-name lookup. I
 
 If no delivery route is resolvable, use `--no-deliver` and report where results can be inspected. Validate the final state with `openclaw cron show <job-id>` and the first run with `openclaw cron runs --id <job-id>`. Do not advance a real mailbox checkpoint during a dry run or before the user approves live ingestion.
 
+Create one additional stable monitoring job named `corip-posting-monitor` when `travel/corip/active-postings.json` contains at least one active posting. Use Heartbeat instead when reliable heartbeat monitoring is already enabled. For a live demo, use a one-minute recurring cron schedule; for normal use, prefer a less frequent interval.
+
+Use this monitoring message:
+
+```text
+Monitor Corip active postings. Read travel/corip/active-postings.json. For each active posting id, call get_posting and compare currentPeople, minPeople, maxPeople, and needsNego with the stored state. Never call join_posting from this monitoring job unless the local record explicitly shows that this agent has not yet joined and the original trip-planning authorization and all constraints are still valid. If nothing changed, reply exactly NO_REPLY. If the minimum is reached for the first time, notify this traveler that the group is formed, mark that notification locally, and stop frequent polling for that posting. If needsNego becomes true or the posting disappears, notify once and update local state. Never duplicate a join or notification.
+```
+
+Example for a live demo:
+
+```bash
+openclaw cron create "*/1 * * * *" "<monitoring-message-above>" --name "corip-posting-monitor" --tz "<IANA_TIMEZONE>" --session isolated --light-context --announce
+```
+
 ### 8. Final verification
 
 Verify each item independently:
@@ -142,6 +183,7 @@ Verify each item independently:
 - Vocal Bridge setup page was shown; connection is labeled accurately.
 - Email connector has read-only access and passed a privacy-preserving test, or is labeled action required.
 - Exactly one `corip-travel-email-sync` job exists with the expected schedule and timezone. It is enabled only when email readiness is complete; otherwise it is disabled and labeled `action required`.
+- At most one `corip-posting-monitor` job exists, and it is enabled only while active postings require monitoring.
 - The workspace paths are writable without exposing email content.
 - When email readiness is complete, the immediate first run succeeded and produced or safely preserved the checkpoint and summaries. Otherwise no mailbox run occurred.
 
@@ -157,8 +199,8 @@ Use this workflow whenever the user asks for a travel plan, itinerary, destinati
 4. Continue normally when the files are absent, empty, or stale; state which missing facts require user input and never invent prior preferences.
 5. Build the plan around confirmed dates, transport, lodging, activities, budget, party size, unresolved questions, and the strongest supported interests.
 6. Use Sabre, when configured, to fill flight gaps. Use Corip to search matching tour, leisure, and taxi postings. Send only the minimum destination, date, type, place, or route fields needed by each external service.
-7. Refresh a selected Corip result with `get_posting` before presenting its capacity as current. Clearly distinguish confirmed itinerary items, proposed options, and Corip coordination opportunities.
-8. After the user accepts material changes, update the relevant private trip summary so later planning and cron runs share the same current context. Do not turn a one-off choice into a durable interest without repeated or explicit evidence.
+7. Refresh a selected Corip result with `get_posting`. If it is compatible and within capacity, join it immediately. If no compatible posting exists, create one immediately when all required fields are known. Record the posting in `travel/corip/active-postings.json` and start monitoring it. Do not ask for another routine confirmation after the user requested the trip plan.
+8. Present the completed plan and Corip action, then update the relevant private trip summary so later planning and cron runs share the same current context. Do not turn a one-off choice into a durable interest without repeated or explicit evidence.
 
 ## Corip operating rules
 
@@ -167,9 +209,9 @@ Follow the live MCP schemas and `docs://mcp-usage` resource. Apply these stable 
 - Search broadly with `search_postings`, then refresh a selected result with `get_posting` before a consequential action.
 - For `tour` and `leisure`, use `place`; for `taxi`, use `departure` and `destination` instead.
 - Supply a stable, non-secret OpenClaw agent identifier as `agentId` when creating a posting.
-- Confirm all posting details immediately before `create_posting`.
+- When an active trip-planning request provides or implies every required field, call `create_posting` without asking for another confirmation.
 - Confirm again before `join_posting` when capacity is full; explain that this can set `needsNego`.
-- Call `join_posting` once per participant only after confirming the participant count.
+- Call `join_posting` once per participant after deriving the participant count from current context. Ask only when that count is genuinely unknown.
 - Call `delete_posting` only after `get_posting` verifies the id and ownership, and after explicit deletion confirmation.
 - Translate place fields to English when the live Corip contract requires it, while presenting results in the user's language.
 - Treat empty search results as a valid result, not a failure.

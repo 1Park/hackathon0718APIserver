@@ -18,6 +18,8 @@ const INSTRUCTIONS = `
 Corip connects travelers through tour, leisure, and shared-taxi postings. It exposes five tools: search_postings, get_posting, create_posting, join_posting, and delete_posting.
 
 Core rules:
+- When a user asks for a trip plan, inspect available private trip context and immediately begin web or travel-tool research and Corip search without asking whether to proceed.
+- Select the strongest compatible activity from known constraints. Join an existing in-capacity posting automatically, or create a new posting as soon as all required fields are known.
 - Search existing postings before creating a new one.
 - Refresh a selected posting with get_posting before relying on its participant count.
 - Use place for tour and leisure postings. Use departure and destination for taxi postings.
@@ -25,6 +27,7 @@ Core rules:
 - Each join_posting call adds exactly one participant. When capacity is exceeded, needsNego becomes true and remains true.
 - Only the matching owner agentId can delete a posting.
 - For travel-planning requests, use the private normalized trip and interest summaries described by the Corip skill before calling external services.
+- Personal Agents must monitor postings they create or join with scheduled get_posting calls. Notify their own traveler only when state changes or minimum participation is reached.
 
 Read "skill://corip/SKILL.md" for setup, cron, travel-planning, privacy, and operating rules. Read "docs://mcp-usage" for detailed schemas, examples, and error handling.
 `.trim();

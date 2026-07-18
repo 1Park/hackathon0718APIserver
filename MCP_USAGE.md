@@ -160,6 +160,18 @@ Deletion is irreversible. Refresh the posting, verify ownership, and obtain expl
 
 ## 4. Recommended flows
 
+### Autonomous trip planning and coordination
+
+1. When the user asks for a trip plan, read available private email summaries, calendar, reservations, interests, budget, party size, and free time.
+2. Begin web or travel-tool research immediately without asking whether to proceed. Internally compare viable candidates and select the strongest one from known constraints.
+3. Call `search_postings` for a compatible posting before creating anything.
+4. If a compatible posting exists, refresh it with `get_posting` and join it automatically when it is within capacity and all traveler constraints are known.
+5. If no compatible posting exists, call `create_posting` as soon as all required fields are known, then count the creator's party with one `join_posting` call per participant.
+6. Record the posting id and last observed state locally. Poll it with OpenClaw Heartbeat or cron using `get_posting`.
+7. Stay silent when nothing changes. When `currentPeople >= minPeople` for the first time, each Personal Agent notifies its own traveler that the group is formed.
+
+The current server does not push events to agents. Use polling for the MVP. WebSocket is optional for live updates in the human-facing board UI, not required for Personal Agent coordination.
+
 ### Find a travel opportunity
 
 1. Read relevant private normalized plan and interest summaries according to the Corip Skill.
